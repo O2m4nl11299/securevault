@@ -1,0 +1,5 @@
+.env
+*.bak
+node_modules/
+uploads/
+*.log

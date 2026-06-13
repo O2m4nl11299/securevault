@@ -1,0 +1,21 @@
+{
+  "name": "securevault",
+  "version": "2.6.0",
+  "description": "Zero-Knowledge File Sharing",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1068.0",
+    "argon2": "^0.44.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.18.0",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.3.0",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^8.0.5",
+    "pg": "^8.21.0",
+    "uuid": "^9.0.0"
+  }
+}

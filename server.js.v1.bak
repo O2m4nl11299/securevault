@@ -50,7 +50,6 @@ const {
   HeadObjectCommand,
 } = require("@aws-sdk/client-s3");
 
-// ─── Config ───────────────────────────────────────────────────────────────────
 // ─── PostgreSQL ───────────────────────────────────────────────────────────────
 const db = new Pool({
   host: process.env.DB_HOST || "127.0.0.1",
@@ -62,6 +61,8 @@ const db = new Pool({
   max: 10,
 });
 db.on("error", (err) => console.error("[DB] Pool error:", err.message));
+
+// ─── Config ───────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "127.0.0.1"; // Loopback — nginx önümüzde
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
@@ -369,8 +370,6 @@ function isValidToken(token) {
 
 app.use(express.static(path.join(__dirname, "public")));
 
-app.get("/kvkk", (req, res) => res.sendFile(path.join(__dirname, "public", "kvkk.html")));
-app.get("/sozlesme", (req, res) => res.sendFile(path.join(__dirname, "public", "sozlesme.html")));
 app.get("/health", async (req, res) => {
   try {
     await redis.ping();
@@ -389,7 +388,7 @@ app.get("/health", async (req, res) => {
 app.post("/upload", uploadLimiter, upload.single("encryptedFile"), async (req, res) => {
   const ip = req.ip;
   if (!req.file) return res.status(400).json({ error: "Dosya yüklenmedi." });
-  // Plan ve limit kontrolu
+  // Plan ve limit kontrolü
   const ANON_MAX_UPLOADS_CL = 3;
   const sessionTokenCL = req.headers["x-session-token"] || "";
   let userPlanCL = "anon";
@@ -400,11 +399,10 @@ app.post("/upload", uploadLimiter, upload.single("encryptedFile"), async (req, r
     } catch(e) {}
   }
   if (userPlanCL === "anon") {
-    const fpCL = req.headers["x-fingerprint"] || "";
-    const anonKeyCL = "anon_uploads:" + hashIp(ip) + (fpCL ? ":" + fpCL : "");
+    const anonKeyCL = "anon_uploads:" + hashIp(ip);
     const countCL = parseInt(await redis.get(anonKeyCL) || "0");
     if (countCL >= ANON_MAX_UPLOADS_CL) {
-      return res.status(403).json({ error: "Ücretsiz gönderim hakkınız doldu. Daha fazla göndermek için üye olun.", upgrade: true });
+      return res.status(403).json({ error: "Uc ucretsiz gonderim hakkiniz doldu. Uye olun.", upgrade: true });
     }
     await redis.incr(anonKeyCL);
     await redis.expire(anonKeyCL, 86400);
@@ -449,6 +447,12 @@ app.post("/upload", uploadLimiter, upload.single("encryptedFile"), async (req, r
     recipient: recipientEmail.replace(/(.{2}).+(@.+)/, "$1***$2"),
   });
 
+  // Anon upload sayacını artır
+  if (!req.headers["x-session-token"]) {
+    const anonKey = "anon_uploads:" + hashIp(req.ip);
+    await redis.incr(anonKey);
+    await redis.expire(anonKey, 86400);
+  }
   res.json({ token, ttl: TOKEN_TTL_SECONDS });
 });
 
@@ -491,8 +495,7 @@ app.post("/upload/init", uploadLimiter, async (req, res) => {
   if (!isValidEmail(recipientEmail)) {
     return res.status(400).json({ error: "Geçersiz email adresi." });
   }
-
-  // Plan ve limit kontrolu
+  // Plan ve limit kontrolü
   const ANON_MAX_UPLOADS = 3;
   const sessionToken = req.headers["x-session-token"] || "";
   let userPlan = "anon";
@@ -510,12 +513,13 @@ app.post("/upload/init", uploadLimiter, async (req, res) => {
   if (userPlan === "anon") {
     const fingerprint = req.headers["x-fingerprint"] || "";
     const anonKey = "anon_uploads:" + hashIp(ip) + (fingerprint ? ":" + fingerprint : "");
+    req._anonKey = anonKey;
     const count = parseInt(await redis.get(anonKey) || "0");
     if (count >= ANON_MAX_UPLOADS) {
       return res.status(403).json({ error: "Ücretsiz gönderim hakkınız doldu. Daha fazla göndermek için üye olun.", upgrade: true });
     }
-    req._anonKey = anonKey;
   }
+
   const uploadId = uuidv4();
   const r2Key = `${uuidv4()}.enc`;
 
@@ -705,14 +709,14 @@ app.post("/upload/finalize/:uploadId", async (req, res) => {
     size: session.totalBytes, chunks: session.chunkCount, parts: session.parts.length,
     recipient: session.recipientEmail.replace(/(.{2}).+(@.+)/, "$1***$2"),
   });
-
-  // Anon upload sayacini artir
+  // Anon upload sayacını artır
   if (!req.headers["x-session-token"]) {
     const fp = req.headers["x-fingerprint"] || "";
     const anonKey = "anon_uploads:" + hashIp(req.ip) + (fp ? ":" + fp : "");
     await redis.incr(anonKey);
     await redis.expire(anonKey, 86400);
   }
+
   res.json({ token, ttl: TOKEN_TTL_SECONDS });
 });
 
@@ -726,7 +730,11 @@ app.post("/send-link", sendLinkLimiter, async (req, res) => {
 
   if (!isValidToken(token)) return res.status(400).json({ error: "Geçersiz token formatı." });
   if (!isValidEmail(recipientEmail)) return res.status(400).json({ error: "Geçersiz email adresi." });
-  if (!isValidKeyB64(keyB64)) return res.status(400).json({ error: "Geçersiz şifreleme anahtarı." });
+  const keyParts = keyB64.split("|");
+  const actualKey = keyParts[0];
+  const pwdHash = keyParts[1] || "";
+  if (!isValidKeyB64(actualKey)) return res.status(400).json({ error: "Geçersiz şifreleme anahtarı." });
+  keyB64 = actualKey;
 
   const LUA_CLAIM_EMAIL = `
     local raw = redis.call('GET', KEYS[1])
@@ -760,7 +768,7 @@ app.post("/send-link", sendLinkLimiter, async (req, res) => {
   let meta;
   try { meta = JSON.parse(raw); } catch { return res.status(500).json({ error: "Bozuk metadata." }); }
 
-  const downloadUrl = `${BASE_URL}/dl/${token}#${encodeURIComponent(keyB64)}`;
+  const downloadUrl = `${BASE_URL}/dl/${token}#${encodeURIComponent(keyB64)}${pwdHash ? "|" + pwdHash : ""}`;
   const safeName = sanitizeFilename(originalName || meta.originalName);
   const ttlDisplay = TOKEN_TTL_SECONDS < 3600
     ? `${Math.round(TOKEN_TTL_SECONDS / 60)} dakika`
@@ -894,7 +902,6 @@ app.get("/api/dl/:token", downloadLimiter, async (req, res) => {
   stream.pipe(res);
 });
 
-// ── SPA fallback ──
 // ─── Auth Endpoints ───────────────────────────────────────────────────────────
 
 // POST /auth/register
@@ -957,29 +964,7 @@ app.post("/auth/recover", async (req, res) => {
   }
 });
 
-// POST /api/delete-account
-app.post("/api/delete-account", async (req, res) => {
-  const { password } = req.body;
-  const sessionToken = req.headers["x-session-token"] || "";
-  if (!sessionToken) return res.status(401).json({ error: "Oturum bulunamadı." });
-  if (!password) return res.status(400).json({ error: "Şifre gerekli." });
-  try {
-    const sessionData = await redis.get("session:" + sessionToken);
-    if (!sessionData) return res.status(401).json({ error: "Oturum süresi dolmuş." });
-    const { userId } = JSON.parse(sessionData);
-    const result = await db.query("SELECT password_hash FROM users WHERE id = $1", [userId]);
-    if (result.rows.length === 0) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
-    const valid = await argon2.verify(result.rows[0].password_hash, password);
-    if (!valid) return res.status(401).json({ error: "Şifre hatalı." });
-    await db.query("DELETE FROM users WHERE id = $1", [userId]);
-    await redis.del("session:" + sessionToken);
-    return res.json({ success: true });
-  } catch (err) {
-    secLog("error", "delete_account_failed", { err: err.message });
-    return res.status(500).json({ error: "Hesap silme başarısız." });
-  }
-});
-
+// ── SPA fallback ──
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });

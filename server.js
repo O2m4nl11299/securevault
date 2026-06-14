@@ -726,7 +726,11 @@ app.post("/send-link", sendLinkLimiter, async (req, res) => {
 
   if (!isValidToken(token)) return res.status(400).json({ error: "Geçersiz token formatı." });
   if (!isValidEmail(recipientEmail)) return res.status(400).json({ error: "Geçersiz email adresi." });
-  if (!isValidKeyB64(keyB64)) return res.status(400).json({ error: "Geçersiz şifreleme anahtarı." });
+  const keyParts = keyB64.split("|");
+  const actualKey = keyParts[0];
+  const pwdHash = keyParts[1] || "";
+  if (!isValidKeyB64(actualKey)) return res.status(400).json({ error: "Geçersiz şifreleme anahtarı." });
+  keyB64 = actualKey;
 
   const LUA_CLAIM_EMAIL = `
     local raw = redis.call('GET', KEYS[1])
@@ -760,7 +764,7 @@ app.post("/send-link", sendLinkLimiter, async (req, res) => {
   let meta;
   try { meta = JSON.parse(raw); } catch { return res.status(500).json({ error: "Bozuk metadata." }); }
 
-  const downloadUrl = `${BASE_URL}/dl/${token}#${encodeURIComponent(keyB64)}`;
+  const downloadUrl = `${BASE_URL}/dl/${token}#${encodeURIComponent(keyB64)}${pwdHash ? "|" + pwdHash : ""}`;
   const safeName = sanitizeFilename(originalName || meta.originalName);
   const ttlDisplay = TOKEN_TTL_SECONDS < 3600
     ? `${Math.round(TOKEN_TTL_SECONDS / 60)} dakika`

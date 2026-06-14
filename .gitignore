@@ -142,3 +142,10 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 *.bak
+
+# Kullanıcı home dizini dosyaları (yanlışlıkla eklenmiş)
+.npm/
+.bashrc
+.bash_logout
+.profile
+.cloud-locale-test.skip

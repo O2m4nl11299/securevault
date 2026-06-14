@@ -67,6 +67,17 @@ const HOST = process.env.HOST || "127.0.0.1"; // Loopback — nginx önümüzde
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const TOKEN_TTL_SECONDS = parseInt(process.env.TOKEN_TTL_SECONDS || "3600");
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || String(250 * 1024 * 1024));
+// Plan bazli dosya boyutu ve gonderim limitleri
+const PLAN_FILE_LIMITS = {
+  anon: 5 * 1024 * 1024,            // 5 MB
+  free: MAX_FILE_SIZE,               // 250 MB
+  premium: 2 * 1024 * 1024 * 1024,   // 2 GB
+};
+const PLAN_SEND_LIMITS = {
+  anon: 3,   // 24 saatte 3 gonderim
+  free: 4,   // 24 saatte 4 gonderim
+  // premium: sinirsiz (kontrol yok)
+};
 
 // R2 multipart minimum part size — son part hariç
 const R2_MIN_PART_SIZE = 5 * 1024 * 1024; // 5 MiB
@@ -292,7 +303,7 @@ const upload = multer({
     }
     cb(null, true);
   },
-  limits: { files: 1, fileSize: MAX_FILE_SIZE },
+  limits: { files: 1, fileSize: PLAN_FILE_LIMITS.premium },
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -390,24 +401,41 @@ app.post("/upload", uploadLimiter, upload.single("encryptedFile"), async (req, r
   const ip = req.ip;
   if (!req.file) return res.status(400).json({ error: "Dosya yüklenmedi." });
   // Plan ve limit kontrolu
-  const ANON_MAX_UPLOADS_CL = 3;
   const sessionTokenCL = req.headers["x-session-token"] || "";
   let userPlanCL = "anon";
+  let userIdCL = null;
   if (sessionTokenCL) {
     try {
       const sd = await redis.get("session:" + sessionTokenCL);
-      if (sd) { userPlanCL = JSON.parse(sd).plan || "free"; }
+      if (sd) {
+        const parsedCL = JSON.parse(sd);
+        userPlanCL = parsedCL.plan || "free";
+        userIdCL = parsedCL.userId;
+      }
     } catch(e) {}
+  }
+  // Dosya boyutu kontrolu (plan bazli)
+  const maxSizeCL = PLAN_FILE_LIMITS[userPlanCL] || PLAN_FILE_LIMITS.free;
+  if (req.file.size > maxSizeCL) {
+    return res.status(413).json({ error: `Dosya çok büyük. Maksimum: ${Math.round(maxSizeCL / 1024 / 1024)} MB` });
   }
   if (userPlanCL === "anon") {
     const fpCL = req.headers["x-fingerprint"] || "";
     const anonKeyCL = "anon_uploads:" + hashIp(ip) + (fpCL ? ":" + fpCL : "");
     const countCL = parseInt(await redis.get(anonKeyCL) || "0");
-    if (countCL >= ANON_MAX_UPLOADS_CL) {
+    if (countCL >= PLAN_SEND_LIMITS.anon) {
       return res.status(403).json({ error: "Ücretsiz gönderim hakkınız doldu. Daha fazla göndermek için üye olun.", upgrade: true });
     }
     await redis.incr(anonKeyCL);
     await redis.expire(anonKeyCL, 86400);
+  } else if (userPlanCL === "free") {
+    const freeKeyCL = "free_uploads:" + userIdCL;
+    const fcountCL = parseInt(await redis.get(freeKeyCL) || "0");
+    if (fcountCL >= PLAN_SEND_LIMITS.free) {
+      return res.status(403).json({ error: "Günlük gönderim hakkınız doldu. Premium'a geçerek sınırsız gönderin.", upgrade: true });
+    }
+    await redis.incr(freeKeyCL);
+    await redis.expire(freeKeyCL, 86400);
   }
 
   const { recipientEmail, originalName } = req.body;
@@ -493,28 +521,36 @@ app.post("/upload/init", uploadLimiter, async (req, res) => {
   }
 
   // Plan ve limit kontrolu
-  const ANON_MAX_UPLOADS = 3;
   const sessionToken = req.headers["x-session-token"] || "";
   let userPlan = "anon";
+  let userId = null;
   if (sessionToken) {
     try {
       const sessionData = await redis.get("session:" + sessionToken);
       if (sessionData) {
         const parsed = JSON.parse(sessionData);
         userPlan = parsed.plan || "free";
-        const userId = parsed.userId;
+        userId = parsed.userId;
         await db.query("UPDATE users SET last_active_at = NOW() WHERE id = $1", [userId]);
       }
     } catch(e) {}
   }
+  const maxFileSize = PLAN_FILE_LIMITS[userPlan] || PLAN_FILE_LIMITS.free;
   if (userPlan === "anon") {
     const fingerprint = req.headers["x-fingerprint"] || "";
     const anonKey = "anon_uploads:" + hashIp(ip) + (fingerprint ? ":" + fingerprint : "");
     const count = parseInt(await redis.get(anonKey) || "0");
-    if (count >= ANON_MAX_UPLOADS) {
+    if (count >= PLAN_SEND_LIMITS.anon) {
       return res.status(403).json({ error: "Ücretsiz gönderim hakkınız doldu. Daha fazla göndermek için üye olun.", upgrade: true });
     }
     req._anonKey = anonKey;
+  } else if (userPlan === "free") {
+    const freeKey = "free_uploads:" + userId;
+    const fcount = parseInt(await redis.get(freeKey) || "0");
+    if (fcount >= PLAN_SEND_LIMITS.free) {
+      return res.status(403).json({ error: "Günlük gönderim hakkınız doldu. Premium'a geçerek sınırsız gönderin.", upgrade: true });
+    }
+    req._freeKey = freeKey;
   }
   const uploadId = uuidv4();
   const r2Key = `${uuidv4()}.enc`;
@@ -534,6 +570,9 @@ app.post("/upload/init", uploadLimiter, async (req, res) => {
   uploadSessions.set(uploadId, {
     r2Key,
     r2UploadId,
+    maxFileSize,
+    userPlan,
+    userId,
     parts: [],                  // [{ PartNumber, ETag }]
     buffer: Buffer.alloc(0),    // 5MB'a ulaşana kadar biriktir
     originalName: sanitizeFilename(originalName),
@@ -579,10 +618,10 @@ app.post("/upload/chunk/:uploadId",
     if (!chunkData || !chunkData.length) {
       return res.status(400).json({ error: "Boş chunk." });
     }
-    if (session.totalBytes + chunkData.length > MAX_FILE_SIZE) {
+    if (session.totalBytes + chunkData.length > session.maxFileSize) {
       await abortR2Multipart(session.r2Key, session.r2UploadId);
       uploadSessions.delete(uploadId);
-      return res.status(413).json({ error: `Dosya çok büyük. Maksimum: ${Math.round(MAX_FILE_SIZE / 1024 / 1024)} MB` });
+      return res.status(413).json({ error: `Dosya çok büyük. Maksimum: ${Math.round(session.maxFileSize / 1024 / 1024)} MB` });
     }
 
     session.isWriting = true;
@@ -706,12 +745,16 @@ app.post("/upload/finalize/:uploadId", async (req, res) => {
     recipient: session.recipientEmail.replace(/(.{2}).+(@.+)/, "$1***$2"),
   });
 
-  // Anon upload sayacini artir
+  // Plan bazli gonderim sayacini artir
   if (!req.headers["x-session-token"]) {
     const fp = req.headers["x-fingerprint"] || "";
     const anonKey = "anon_uploads:" + hashIp(req.ip) + (fp ? ":" + fp : "");
     await redis.incr(anonKey);
     await redis.expire(anonKey, 86400);
+  } else if (session.userPlan === "free" && session.userId) {
+    const freeKey = "free_uploads:" + session.userId;
+    await redis.incr(freeKey);
+    await redis.expire(freeKey, 86400);
   }
   res.json({ token, ttl: TOKEN_TTL_SECONDS });
 });
@@ -993,7 +1036,7 @@ app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
       secLog("warn", "file_too_large", { ip: req.ip });
-      return res.status(413).json({ error: `Dosya çok büyük. Maksimum: ${Math.round(MAX_FILE_SIZE / 1024 / 1024)} MB` });
+      return res.status(413).json({ error: `Dosya çok büyük. Maksimum: ${Math.round(PLAN_FILE_LIMITS.premium / 1024 / 1024)} MB` });
     }
     secLog("warn", "multer_error", { code: err.code, msg: err.message });
     return res.status(400).json({ error: `Yükleme hatası: ${err.message}` });

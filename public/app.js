@@ -48,6 +48,21 @@ async function getBrowserFingerprint() {
 
   var CHUNK_SIZE = 5 * 1024 * 1024;
   var MAX_FILE_SIZE = 250 * 1024 * 1024;
+  var PLAN_FILE_LIMITS = {
+    anon: 5 * 1024 * 1024,
+    free: 250 * 1024 * 1024,
+    premium: 2 * 1024 * 1024 * 1024,
+  };
+  function getCurrentMaxFileSize() {
+    var session = sessionStorage.getItem('sv_session');
+    if (!session) return PLAN_FILE_LIMITS.anon;
+    var plan = sessionStorage.getItem('sv_plan') || 'free';
+    return PLAN_FILE_LIMITS[plan] || PLAN_FILE_LIMITS.free;
+  }
+  function formatSize(bytes) {
+    if (bytes >= 1024 * 1024 * 1024) return (bytes / 1024 / 1024 / 1024) + ' GB';
+    return Math.round(bytes / 1024 / 1024) + ' MB';
+  }
   var MAGIC = [0x53, 0x56, 0x30, 0x32]; // "SV02"
 
   var selectedFile = null;
@@ -141,8 +156,17 @@ async function getBrowserFingerprint() {
 
   window.onFileSelected = function(input) {
     var file = input.files[0]; if (!file) return;
-    if (file.size > MAX_FILE_SIZE) {
-      showAlert('uploadAlert', 'error', { icon: '⚠', title: 'Dosya çok büyük.', lines: ['Maksimum: 250 MB'] });
+    var maxSize = getCurrentMaxFileSize();
+    if (file.size > maxSize) {
+      var session = sessionStorage.getItem('sv_session');
+      var plan = sessionStorage.getItem('sv_plan') || 'free';
+      if (!session) {
+        showAlert('uploadAlert', 'error', { icon: '⚠', title: 'Dosya çok büyük.', lines: ['Üye olmayan kullanıcılar en fazla ' + formatSize(PLAN_FILE_LIMITS.anon) + ' yükleyebilir.', 'Daha büyük dosyalar için üye olun (250 MB) veya giriş yapın.'] });
+      } else if (plan !== 'premium' && file.size <= PLAN_FILE_LIMITS.premium) {
+        showAlert('uploadAlert', 'error', { icon: '⚠', title: 'Dosya çok büyük.', lines: ['Free üyelik limiti: ' + formatSize(PLAN_FILE_LIMITS.free) + '.', 'Bu dosya boyutu için Premium (2 GB) gerekiyor — yakında!'] });
+      } else {
+        showAlert('uploadAlert', 'error', { icon: '⚠', title: 'Dosya çok büyük.', lines: ['Maksimum: ' + formatSize(maxSize)] });
+      }
       input.value = ''; return;
     }
     selectedFile = file; updateDropzone(file); checkEncryptReady();
@@ -623,9 +647,9 @@ async function getBrowserFingerprint() {
     // Boyut kontrolü
     var svSession = sessionStorage.getItem('sv_session');
     var svPlan = sessionStorage.getItem('sv_plan');
-    var anonMaxSize = 5 * 1024 * 1024;
-    if (!svSession && selectedFile.size > anonMaxSize) {
-      showAlert('uploadAlert', 'error', { icon: '❌', title: 'Dosya çok büyük.', lines: ['Üye olmayan kullanıcılar en fazla 5 MB yükleyebilir.', 'Daha büyük dosyalar için üye olun veya giriş yapın.'] });
+    var maxSizeCheck = getCurrentMaxFileSize();
+    if (selectedFile.size > maxSizeCheck) {
+      showAlert('uploadAlert', 'error', { icon: '❌', title: 'Dosya çok büyük.', lines: ['Maksimum: ' + formatSize(maxSizeCheck)] });
       return;
     }
 

@@ -598,7 +598,7 @@ app.post("/upload/init", uploadLimiter, async (req, res) => {
  * Chunk session.buffer'a eklenir; buffer >= 5MB ise R2'ye part olarak gönderilir.
  */
 app.post("/upload/chunk/:uploadId",
-  express.raw({ type: "application/octet-stream", limit: "10mb" }),
+  express.raw({ type: "application/octet-stream", limit: "25mb" }),
   async (req, res) => {
     const { uploadId } = req.params;
     const session = uploadSessions.get(uploadId);

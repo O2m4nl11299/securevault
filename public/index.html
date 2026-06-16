@@ -240,7 +240,7 @@
       <div class="crypto-row"><span class="crypto-key">ANAHTAR</span><span class="crypto-val">256-bit CSPRNG</span></div>
       <div class="crypto-row"><span class="crypto-key">NONCE/IV</span><span class="crypto-val">96-bit CSPRNG (per chunk)</span></div>
       <div class="crypto-row"><span class="crypto-key">AUTH TAG</span><span class="crypto-val">128-bit (per chunk)</span></div>
-      <div class="crypto-row"><span class="crypto-key">CHUNK</span><span class="crypto-val">5 MB</span></div>
+      <div class="crypto-row"><span class="crypto-key">CHUNK</span><span class="crypto-val">20 MB</span></div>
       <div class="crypto-row"><span class="crypto-key">TRANSPORT</span><span class="crypto-val">TLS 1.3</span></div>
       <div class="crypto-row"><span class="crypto-key">DOSYA LİMİTİ</span><span class="crypto-val">250 MB</span></div>
       <div class="crypto-row"><span class="crypto-key">TOKEN ÖMRÜ</span><span class="crypto-val">1 SAAT</span></div>
@@ -251,11 +251,11 @@
     <div class="section-label" style="margin-top:28px;">GÜVENLİK AKIŞI</div>
     <div class="card">
       <ul class="flow-list">
-        <li class="flow-item"><div class="flow-num">1</div><div class="flow-text">Dosya <strong>tarayıcıda</strong> AES-256-GCM ile <strong>5 MB'lık parçalar</strong> halinde şifrelenir</div></li>
+        <li class="flow-item"><div class="flow-num">1</div><div class="flow-text">Dosya <strong>tarayıcıda</strong> AES-256-GCM ile <strong>20 MB'lık parçalar</strong> halinde şifrelenir</div></li>
         <li class="flow-item"><div class="flow-num">2</div><div class="flow-text">Şifreli blob TLS üzerinden sunucuya yüklenir — <strong>anahtar gönderilmez</strong></div></li>
         <li class="flow-item"><div class="flow-num">3</div><div class="flow-text">Sunucu token üretir → istemci linki oluşturur → sunucu kendi domain'i ile e-posta atar</div></li>
         <li class="flow-item"><div class="flow-num">4</div><div class="flow-text">Alıcı linke tıklar → <strong>#KEY asla HTTP isteğine girmez</strong></div></li>
-        <li class="flow-item"><div class="flow-num">5</div><div class="flow-text">Şifreli dosya <strong>stream olarak</strong> indirilir, her chunk <strong>anında çözülüp diske yazılır</strong> — RAM ~5 MB</div></li>
+        <li class="flow-item"><div class="flow-num">5</div><div class="flow-text">Şifreli dosya <strong>stream olarak</strong> indirilir, her chunk <strong>anında çözülüp diske yazılır</strong> — RAM ~20 MB</div></li>
         <li class="flow-item"><div class="flow-num">6</div><div class="flow-text">Token <strong>atomik olarak silinir</strong>, dosya diskten temizlenir</div></li>
       </ul>
     </div>

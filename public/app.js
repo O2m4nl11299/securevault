@@ -35,9 +35,9 @@ async function getBrowserFingerprint() {
  *  - [KRİTİK] İndirme sırasında dosya artık res.arrayBuffer() ile tamamı RAM'e çekilmiyor.
  *    res.body.getReader() ile stream olarak okunup, her SV02 chunk anında decrypt ediliyor.
  *  - File System Access API (showSaveFilePicker): Decrypt edilen chunk doğrudan diske yazılır.
- *    Peak RAM: ~1 chunk boyutu (5 MB). Mobil cihazlarda bile 250 MB dosya çökmeden indirilir.
+ *    Peak RAM: ~1 chunk boyutu (20 MB). Mobil cihazlarda bile 250 MB dosya çökmeden indirilir.
  *  - Fallback: showSaveFilePicker desteklenmiyorsa (Firefox, Safari, iOS) Blob biriktirilir
- *    ama chunk-by-chunk decrypt sayesinde peak RAM ~fileSize+5MB (eskiden ~3*fileSize).
+ *    ama chunk-by-chunk decrypt sayesinde peak RAM ~fileSize+20MB (eskiden ~3*fileSize).
  *  - Legacy format (SV02 olmayan) dosyalar hala desteklenir (geriye uyumlu).
  *
  * Önceki düzeltmeler korunuyor: phishing fix, chunked upload, DOM manipulation,
@@ -46,7 +46,7 @@ async function getBrowserFingerprint() {
 (function() {
   'use strict';
 
-  var CHUNK_SIZE = 5 * 1024 * 1024;
+  var CHUNK_SIZE = 20 * 1024 * 1024;
   var MAX_FILE_SIZE = 250 * 1024 * 1024;
   var PLAN_FILE_LIMITS = {
     anon: 5 * 1024 * 1024,
@@ -477,7 +477,7 @@ async function getBrowserFingerprint() {
 
   /**
    * [v2.4] YOL A — File System Access API ile streaming decrypt.
-   * Peak RAM: ~5 MB (1 chunk). 250 MB dosya bile mobilde çökmez.
+   * Peak RAM: ~20 MB (1 chunk). 250 MB dosya bile mobilde çökmez.
    *
    * @param {Response} response - fetch response (stream)
    * @param {CryptoKey} key
@@ -671,12 +671,12 @@ async function getBrowserFingerprint() {
 
       // ── [v2.8] Streaming upload dene — başarısız olursa legacy fallback ──
       try {
-        log('info', 'Streaming şifreleme + yükleme (AES-256-GCM, 5 MB chunks)...');
+        log('info', 'Streaming şifreleme + yükleme (AES-256-GCM, 20 MB chunks)...');
         setProgress(10, 'Şifreleniyor ve yükleniyor...');
         data = await encryptAndUploadStreaming(selectedFile, key, email, function(done, total) {
           setProgress(10 + Math.round((done/total)*80), 'Şifreleniyor ve yükleniyor... (' + done + '/' + total + ')');
         });
-        log('ok', '✅ Streaming yükleme tamamlandı (peak RAM ~10 MB)');
+        log('ok', '✅ Streaming yükleme tamamlandı (peak RAM ~20 MB)');
       } catch (streamErr) {
         // Upgrade gerekiyorsa klasik moda geçme
         if (streamErr.message && streamErr.message.startsWith('__UPGRADE__:')) {
@@ -903,13 +903,13 @@ async function getBrowserFingerprint() {
 
       // ── [v2.4] Streaming decrypt karar ağacı ──
       if (supportsFileSystemAccess()) {
-        // YOL A: File System Access API — peak RAM ~5 MB
+        // YOL A: File System Access API — peak RAM ~20 MB
         showAlert('decryptAlert', 'warn', { icon: '⏳', title: 'Şifre çözülüyor (stream)...' });
 
         try {
           var result = await streamDecryptToFile(res, key, filename);
           showAlert('decryptAlert', 'success', { icon: '✅', title: 'Dosya başarıyla kaydedildi!',
-            lines: [result.filename + ' şifresi çözülerek diske yazıldı.', 'RAM kullanımı: minimal (~5 MB)'] });
+            lines: [result.filename + ' şifresi çözülerek diske yazıldı.', 'RAM kullanımı: minimal (~20 MB)'] });
         } catch (fsErr) {
           // Kullanıcı "Kaydet" dialog'unu iptal ettiyse
           if (fsErr.name === 'AbortError') {

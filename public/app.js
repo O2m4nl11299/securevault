@@ -69,6 +69,7 @@ async function getBrowserFingerprint() {
   var selectedFile = null;
   var selectedEncFile = null;
   var isUploading = false;
+  var uploadMode = 'file';
 
   if (window.location.pathname.startsWith("/dl/")) {
     document.body.classList.add('download-mode');
@@ -202,9 +203,31 @@ async function getBrowserFingerprint() {
   var EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
   function isValidEmail(e) { return e && typeof e === 'string' && e.length <= 254 && EMAIL_REGEX.test(e); }
   function checkEncryptReady() {
-    document.getElementById('encryptBtn').disabled = !(selectedFile && isValidEmail(document.getElementById('recipientEmail').value.trim()));
+    var emailOk = isValidEmail(document.getElementById('recipientEmail').value.trim());
+    if (uploadMode === 'text') {
+      var txtVal = document.getElementById('textInput').value;
+      document.getElementById('encryptBtn').disabled = !(txtVal.trim().length > 0 && emailOk);
+    } else {
+      document.getElementById('encryptBtn').disabled = !(selectedFile && emailOk);
+    }
   }
   document.getElementById('recipientEmail').addEventListener('input', checkEncryptReady);
+  var textInputEl = document.getElementById('textInput');
+  if (textInputEl) textInputEl.addEventListener('input', function() {
+    document.getElementById('textInputCounter').textContent = textInputEl.value.length + ' karakter';
+    checkEncryptReady();
+  });
+  // ─── Dosya / Metin mod geçişi (aynı panel, aynı alert/log altyapısı) ───────
+  function setUploadMode(mode) {
+    uploadMode = mode;
+    document.getElementById('fileModeSection').style.display = (mode === 'file') ? '' : 'none';
+    document.getElementById('textModeSection').style.display = (mode === 'text') ? '' : 'none';
+    checkEncryptReady();
+  }
+  var fileModeTabBtn = document.getElementById('fileModeTabBtn');
+  if (fileModeTabBtn) fileModeTabBtn.addEventListener('click', function() { setUploadMode('file'); });
+  var textModeTabBtn = document.getElementById('textModeTabBtn');
+  if (textModeTabBtn) textModeTabBtn.addEventListener('click', function() { setUploadMode('text'); });
 
   var dz = document.getElementById('dropzone');
   dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
@@ -644,6 +667,11 @@ async function getBrowserFingerprint() {
 
   window.encryptAndSend = async function() {
     var email = document.getElementById('recipientEmail').value.trim();
+    if (uploadMode === 'text') {
+      var textVal = document.getElementById('textInput').value;
+      if (!textVal.trim()) return;
+      selectedFile = new File([new Blob([textVal], { type: 'text/plain' })], 'metin.txt', { type: 'text/plain' });
+    }
     if (!selectedFile || !isValidEmail(email) || isUploading) return;
     // Boyut kontrolü
     var svSession = sessionStorage.getItem('sv_session');

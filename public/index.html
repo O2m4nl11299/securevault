@@ -164,24 +164,34 @@
 </header>
 <main>
   <div class="tabs">
-    <button class="tab active tab-upload" data-tab="upload"><span class="tab-number">01</span>DOSYA YÜKLE &amp; GÖNDER</button>
+    <button class="tab active tab-upload" data-tab="upload" id="fileModeTabBtn"><span class="tab-number">01</span>DOSYA YÜKLE &amp; GÖNDER</button>
     <button class="tab tab-decrypt" data-tab="decrypt"><span class="tab-number">02</span>ŞİFRELİ DOSYAYI ÇÖZ</button>
     <button class="tab tab-info" data-tab="info"><span class="tab-number">03</span>GÜVENLİK</button>
     <button class="tab tab-why" data-tab="why"><span class="tab-number">04</span>NEDEN BİZ?</button>
     <button class="tab tab-auth" data-tab="auth"><span class="tab-number">05</span>ÜYE OL / GİRİŞ</button>
-    <button class="tab tab-admin" data-tab="admin" id="adminTabBtn" style="display:none;"><span class="tab-number">06</span>ADMIN</button>
+    <button class="tab tab-text" data-tab="upload" id="textModeTabBtn"><span class="tab-number">06</span>METİN ŞİFRELE</button>
+    <button class="tab tab-admin" data-tab="admin" id="adminTabBtn" style="display:none;"><span class="tab-number">07</span>ADMIN</button>
   </div>
   <!-- UPLOAD -->
   <div class="panel active" id="panel-upload">
-    <div class="section-label">DOSYA SEÇ</div>
-    <div class="card" style="padding:0;">
-      <div class="dropzone" id="dropzone">
-        <input type="file" id="fileInput" style="display:none">
-        <span class="dropzone-icon" id="dropIcon">📁</span>
-        <div id="dropContent">
-          <div class="dropzone-text">Dosyayı buraya sürükle veya tıkla</div>
-          <div class="dropzone-hint">PDF, DOCX, XLSX, CSV, TXT, PNG, JPG ve daha fazlası</div>
+    <div id="fileModeSection">
+      <div class="section-label">DOSYA SEÇ</div>
+      <div class="card" style="padding:0;">
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" style="display:none">
+          <span class="dropzone-icon" id="dropIcon">📁</span>
+          <div id="dropContent">
+            <div class="dropzone-text">Dosyayı buraya sürükle veya tıkla</div>
+            <div class="dropzone-hint">PDF, DOCX, XLSX, CSV, TXT, PNG, JPG ve daha fazlası</div>
+          </div>
         </div>
+      </div>
+    </div>
+    <div id="textModeSection" style="display:none;">
+      <div class="section-label">ŞİFRELENECEK METİN</div>
+      <div class="card">
+        <textarea id="textInput" placeholder="Şifrelemek istediğiniz metni buraya yazın veya yapıştırın..." rows="8" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border-bright);border-radius:4px;padding:12px;font-family:var(--mono);font-size:13px;resize:vertical;"></textarea>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:6px;" id="textInputCounter">0 karakter</div>
       </div>
     </div>
     <div class="section-label" style="margin-top:28px;">ALICI BİLGİLERİ</div>

@@ -328,6 +328,16 @@
       </div>
     </div>
   </div>
+  <div id="adminPwdModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:var(--surface);border:1px solid var(--border-bright);border-radius:4px;padding:24px;max-width:320px;width:90%;">
+      <div class="field-label" style="margin-bottom:12px;">İşlemi onaylamak için ŞİFRENİZİ girin</div>
+      <input type="password" id="adminPwdModalInput" autocomplete="current-password" style="margin-bottom:16px;width:100%;">
+      <div style="display:flex;gap:8px;">
+        <button class="btn secondary" id="adminPwdModalCancel" style="flex:1;">İPTAL</button>
+        <button class="btn" id="adminPwdModalConfirm" style="flex:1;">ONAYLA</button>
+      </div>
+    </div>
+  </div>
   <div class="panel" id="panel-admin">
     <div class="section-label">ADMIN PANELİ</div>
     <div class="card">

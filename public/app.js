@@ -1123,6 +1123,34 @@ async function getBrowserFingerprint() {
         setTimeout(function() { showAuthForm("login"); }, 1500);
       } catch(e) { alrt.className="alert error"; alrt.textContent="Bağlantı hatası."; }
     });
+    // ─── Şifre onay modalı (şifreyi maskeler — native prompt() maskelemiyor) ──
+    function askAdminPassword() {
+      return new Promise(function(resolve) {
+        var modal = document.getElementById("adminPwdModal");
+        var input = document.getElementById("adminPwdModalInput");
+        var btnOk = document.getElementById("adminPwdModalConfirm");
+        var btnCancel = document.getElementById("adminPwdModalCancel");
+        input.value = "";
+        modal.style.display = "flex";
+        setTimeout(function() { input.focus(); }, 50);
+        function cleanup(result) {
+          modal.style.display = "none";
+          btnOk.removeEventListener("click", onOk);
+          btnCancel.removeEventListener("click", onCancel);
+          input.removeEventListener("keydown", onKeydown);
+          modal.removeEventListener("click", onOverlay);
+          resolve(result);
+        }
+        function onOk() { cleanup(input.value || null); }
+        function onCancel() { cleanup(null); }
+        function onKeydown(e) { if (e.key === "Enter") { cleanup(input.value || null); } else if (e.key === "Escape") { cleanup(null); } }
+        function onOverlay(e) { if (e.target === modal) cleanup(null); }
+        btnOk.addEventListener("click", onOk);
+        btnCancel.addEventListener("click", onCancel);
+        input.addEventListener("keydown", onKeydown);
+        modal.addEventListener("click", onOverlay);
+      });
+    }
     // ─── Admin Panel ──────────────────────────────────────────────────────────
     var adminSearchBtn = document.getElementById("adminSearchBtn");
     if (adminSearchBtn) adminSearchBtn.addEventListener("click", async function() {
@@ -1171,17 +1199,21 @@ async function getBrowserFingerprint() {
       var alrt = document.getElementById("adminUpdateAlert");
       if (!u) return;
       if (!confirm("'" + u + "' kullanıcısını KALICI OLARAK silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
+      var adminPwd = await askAdminPassword();
+      if (!adminPwd) return;
       try {
         var res = await fetch("/admin/delete-user", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-session-token": sessionStorage.getItem("sv_session") || "" },
-          body: JSON.stringify({ username: u })
+          body: JSON.stringify({ username: u, adminPassword: adminPwd })
         });
         var data = await res.json();
         if (!res.ok) { alrt.className="alert error"; alrt.textContent=data.error; return; }
         alrt.className="alert success"; alrt.textContent="Hesap silindi: " + u;
-        document.getElementById("adminResultBox").style.display = "none";
-        document.getElementById("adminSearchUsername").value = "";
+        setTimeout(function() {
+          document.getElementById("adminResultBox").style.display = "none";
+          document.getElementById("adminSearchUsername").value = "";
+        }, 1800);
       } catch(e) { alrt.className="alert error"; alrt.textContent="Bağlantı hatası."; }
     });
   } catch(authErr) { console.error("[Auth] binding error:", authErr.message); }

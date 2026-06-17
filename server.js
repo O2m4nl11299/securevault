@@ -1072,7 +1072,7 @@ app.post("/admin/set-plan", requireAdmin, async (req, res) => {
     const usernameHash = crypto.createHash("sha256").update(username.toLowerCase().trim()).digest("hex");
     const result = await db.query("UPDATE users SET plan = $1 WHERE username_hash = $2 RETURNING id, plan", [plan, usernameHash]);
     if (result.rows.length === 0) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
-    secLog("info", "admin_plan_changed", { adminUserId: req._adminUserId, targetPlan: plan });
+    secLog("info", "admin_plan_changed", { adminUserId: req._adminUserId, targetUserId: result.rows[0].id, targetPlan: plan });
     return res.json({ success: true, plan: result.rows[0].plan });
   } catch (err) {
     secLog("error", "admin_set_plan_failed", { err: err.message });
@@ -1081,13 +1081,18 @@ app.post("/admin/set-plan", requireAdmin, async (req, res) => {
 });
 // POST /admin/delete-user
 app.post("/admin/delete-user", requireAdmin, async (req, res) => {
-  const { username } = req.body;
+  const { username, adminPassword } = req.body;
   if (!username) return res.status(400).json({ error: "Kullanıcı adı gerekli." });
+  if (!adminPassword) return res.status(400).json({ error: "Onay için kendi şifreniz gerekli." });
   try {
+    const adminResult = await db.query("SELECT password_hash FROM users WHERE id = $1", [req._adminUserId]);
+    if (adminResult.rows.length === 0) return res.status(401).json({ error: "Yetkilendirme hatası." });
+    const adminValid = await argon2.verify(adminResult.rows[0].password_hash, adminPassword);
+    if (!adminValid) return res.status(401).json({ error: "Şifreniz hatalı." });
     const usernameHash = crypto.createHash("sha256").update(username.toLowerCase().trim()).digest("hex");
     const result = await db.query("DELETE FROM users WHERE username_hash = $1 RETURNING id", [usernameHash]);
     if (result.rows.length === 0) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
-    secLog("info", "admin_user_deleted", { adminUserId: req._adminUserId });
+    secLog("info", "admin_user_deleted", { adminUserId: req._adminUserId, targetUserId: result.rows[0].id });
     return res.json({ success: true });
   } catch (err) {
     secLog("error", "admin_delete_user_failed", { err: err.message });

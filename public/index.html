@@ -169,6 +169,7 @@
     <button class="tab tab-info" data-tab="info"><span class="tab-number">03</span>GÜVENLİK</button>
     <button class="tab tab-why" data-tab="why"><span class="tab-number">04</span>NEDEN BİZ?</button>
     <button class="tab tab-auth" data-tab="auth"><span class="tab-number">05</span>ÜYE OL / GİRİŞ</button>
+    <button class="tab tab-admin" data-tab="admin" id="adminTabBtn" style="display:none;"><span class="tab-number">06</span>ADMIN</button>
   </div>
   <!-- UPLOAD -->
   <div class="panel active" id="panel-upload">
@@ -314,6 +315,32 @@
         <input type="password" id="recPassword" placeholder="En az 8 karakter" autocomplete="new-password" style="margin-bottom:16px;">
         <button class="btn" id="recoverBtn">ŞİFREYİ SIFIRLA</button>
         <div class="alert" id="recoverAlert" style="margin-top:12px;"></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel" id="panel-admin">
+    <div class="section-label">ADMIN PANELİ</div>
+    <div class="card">
+      <label class="field-label">KULLANICI ADI</label>
+      <input type="text" id="adminSearchUsername" placeholder="kullanici_adi" autocomplete="off" style="margin-bottom:12px;">
+      <button class="btn" id="adminSearchBtn">ARA</button>
+      <div class="alert" id="adminSearchAlert" style="margin-top:12px;"></div>
+      <div id="adminResultBox" style="display:none;margin-top:20px;padding:16px;border:1px solid var(--border-bright);border-radius:4px;">
+        <div class="field-label" style="margin-bottom:8px;">Plan: <span id="adminResultPlan" style="color:var(--green);"></span></div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">Gönderim sayısı: <span id="adminResultUploads"></span></div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">Son aktif: <span id="adminResultLastActive"></span></div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:16px;">Kayıt tarihi: <span id="adminResultCreated"></span></div>
+        <label class="field-label">YENİ PLAN</label>
+        <select id="adminPlanSelect" style="margin-bottom:16px;width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border-bright);border-radius:4px;padding:10px;font-family:var(--mono);font-size:13px;">
+          <option value="free">Free (250 MB, 4 gönderim/gün)</option>
+          <option value="premium">Premium (2 GB, sınırsız)</option>
+          <option value="admin">Admin (20 GB, sınırsız)</option>
+        </select>
+        <button class="btn" id="adminUpdatePlanBtn">PLANI GÜNCELLE</button>
+        <div class="alert" id="adminUpdateAlert" style="margin-top:12px;"></div>
+        <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border-bright);">
+          <button class="btn" id="adminDeleteUserBtn" style="border-color:#ff6b6b;color:#ff6b6b;">HESABI SİL</button>
+        </div>
       </div>
     </div>
   </div>

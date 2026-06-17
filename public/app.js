@@ -52,6 +52,7 @@ async function getBrowserFingerprint() {
     anon: 5 * 1024 * 1024,
     free: 250 * 1024 * 1024,
     premium: 2 * 1024 * 1024 * 1024,
+    admin: 20 * 1024 * 1024 * 1024,
   };
   function getCurrentMaxFileSize() {
     var session = sessionStorage.getItem('sv_session');
@@ -1003,6 +1004,10 @@ async function getBrowserFingerprint() {
       document.getElementById("accountPlan").textContent = sessionStorage.getItem("sv_plan") || "free";
       showAuthForm("account");
     }
+    if (sessionStorage.getItem("sv_is_admin") === "true") {
+      var adminTabBtn0 = document.getElementById("adminTabBtn");
+      if (adminTabBtn0) adminTabBtn0.style.display = "";
+    }
     var showReg = document.getElementById("showRegister");
     var showLog = document.getElementById("showLogin");
     var showRec = document.getElementById("showRecover");
@@ -1037,6 +1042,9 @@ async function getBrowserFingerprint() {
         if (!res.ok) { alrt.className="alert error"; alrt.textContent=data.error; return; }
         sessionStorage.setItem("sv_session", data.sessionToken);
         sessionStorage.setItem("sv_plan", data.plan);
+        sessionStorage.setItem("sv_is_admin", data.isAdmin ? "true" : "false");
+        var adminTabBtn1 = document.getElementById("adminTabBtn");
+        if (adminTabBtn1) adminTabBtn1.style.display = data.isAdmin ? "" : "none";
         document.getElementById("accountPlan").textContent = data.plan;
         showAuthForm("account");
         alrt.className="alert success"; alrt.textContent="Giriş başarılı! Plan: " + data.plan;
@@ -1066,6 +1074,9 @@ async function getBrowserFingerprint() {
     if (logoutBtn) logoutBtn.addEventListener("click", function() {
       sessionStorage.removeItem("sv_session");
       sessionStorage.removeItem("sv_plan");
+      sessionStorage.removeItem("sv_is_admin");
+      var adminTabBtn2 = document.getElementById("adminTabBtn");
+      if (adminTabBtn2) adminTabBtn2.style.display = "none";
       showAuthForm("login");
     });
     var deleteBtn = document.getElementById("deleteAccountBtn");
@@ -1082,6 +1093,67 @@ async function getBrowserFingerprint() {
         sessionStorage.removeItem("sv_plan");
         alrt.className="alert success"; alrt.textContent="Hesabınız silindi.";
         setTimeout(function() { showAuthForm("login"); }, 1500);
+      } catch(e) { alrt.className="alert error"; alrt.textContent="Bağlantı hatası."; }
+    });
+    // ─── Admin Panel ──────────────────────────────────────────────────────────
+    var adminSearchBtn = document.getElementById("adminSearchBtn");
+    if (adminSearchBtn) adminSearchBtn.addEventListener("click", async function() {
+      var u = document.getElementById("adminSearchUsername").value.trim();
+      var alrt = document.getElementById("adminSearchAlert");
+      var box = document.getElementById("adminResultBox");
+      box.style.display = "none";
+      alrt.className = "alert"; alrt.textContent = "";
+      if (!u) { alrt.className="alert error"; alrt.textContent="Kullanıcı adı girin."; return; }
+      try {
+        var res = await fetch("/admin/lookup?username=" + encodeURIComponent(u), {
+          headers: { "x-session-token": sessionStorage.getItem("sv_session") || "" }
+        });
+        var data = await res.json();
+        if (!res.ok) { alrt.className="alert error"; alrt.textContent=data.error; return; }
+        document.getElementById("adminResultPlan").textContent = data.user.plan;
+        document.getElementById("adminResultUploads").textContent = data.user.upload_count;
+        document.getElementById("adminResultLastActive").textContent = new Date(data.user.last_active_at).toLocaleString("tr-TR");
+        document.getElementById("adminResultCreated").textContent = new Date(data.user.created_at).toLocaleString("tr-TR");
+        document.getElementById("adminPlanSelect").value = data.user.plan;
+        box.style.display = "block";
+      } catch(e) { alrt.className="alert error"; alrt.textContent="Bağlantı hatası."; }
+    });
+    var adminUpdatePlanBtn = document.getElementById("adminUpdatePlanBtn");
+    if (adminUpdatePlanBtn) adminUpdatePlanBtn.addEventListener("click", async function() {
+      var u = document.getElementById("adminSearchUsername").value.trim();
+      var newPlan = document.getElementById("adminPlanSelect").value;
+      var alrt = document.getElementById("adminUpdateAlert");
+      if (!u) return;
+      if (!confirm("'" + u + "' kullanıcısının planını '" + newPlan + "' yapmak istediğinize emin misiniz?")) return;
+      try {
+        var res = await fetch("/admin/set-plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-session-token": sessionStorage.getItem("sv_session") || "" },
+          body: JSON.stringify({ username: u, plan: newPlan })
+        });
+        var data = await res.json();
+        if (!res.ok) { alrt.className="alert error"; alrt.textContent=data.error; return; }
+        document.getElementById("adminResultPlan").textContent = data.plan;
+        alrt.className="alert success"; alrt.textContent="Plan güncellendi: " + data.plan;
+      } catch(e) { alrt.className="alert error"; alrt.textContent="Bağlantı hatası."; }
+    });
+    var adminDeleteUserBtn = document.getElementById("adminDeleteUserBtn");
+    if (adminDeleteUserBtn) adminDeleteUserBtn.addEventListener("click", async function() {
+      var u = document.getElementById("adminSearchUsername").value.trim();
+      var alrt = document.getElementById("adminUpdateAlert");
+      if (!u) return;
+      if (!confirm("'" + u + "' kullanıcısını KALICI OLARAK silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
+      try {
+        var res = await fetch("/admin/delete-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-session-token": sessionStorage.getItem("sv_session") || "" },
+          body: JSON.stringify({ username: u })
+        });
+        var data = await res.json();
+        if (!res.ok) { alrt.className="alert error"; alrt.textContent=data.error; return; }
+        alrt.className="alert success"; alrt.textContent="Hesap silindi: " + u;
+        document.getElementById("adminResultBox").style.display = "none";
+        document.getElementById("adminSearchUsername").value = "";
       } catch(e) { alrt.className="alert error"; alrt.textContent="Bağlantı hatası."; }
     });
   } catch(authErr) { console.error("[Auth] binding error:", authErr.message); }

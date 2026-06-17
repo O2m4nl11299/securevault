@@ -72,6 +72,7 @@ const PLAN_FILE_LIMITS = {
   anon: 5 * 1024 * 1024,            // 5 MB
   free: MAX_FILE_SIZE,               // 250 MB
   premium: 2 * 1024 * 1024 * 1024,   // 2 GB
+  admin: 20 * 1024 * 1024 * 1024,    // 20 GB (sadece admin hesaplar icin, streaming yolu)
 };
 const PLAN_SEND_LIMITS = {
   anon: 3,   // 24 saatte 3 gonderim
@@ -970,7 +971,7 @@ app.post("/auth/login", async (req, res) => {
   if (!username || !password) return res.status(400).json({ error: "Kullanıcı adı ve şifre gerekli." });
   try {
     const usernameHash = crypto.createHash("sha256").update(username.toLowerCase().trim()).digest("hex");
-    const result = await db.query("SELECT id, password_hash, plan, upload_count FROM users WHERE username_hash = $1", [usernameHash]);
+    const result = await db.query("SELECT id, password_hash, plan, upload_count, is_admin FROM users WHERE username_hash = $1", [usernameHash]);
     if (result.rows.length === 0) return res.status(401).json({ error: "Kullanıcı adı veya şifre hatalı." });
     const user = result.rows[0];
     const valid = await argon2.verify(user.password_hash, password);
@@ -978,7 +979,7 @@ app.post("/auth/login", async (req, res) => {
     await db.query("UPDATE users SET last_active_at = NOW() WHERE id = $1", [user.id]);
     const sessionToken = randomBytes(32).toString("hex");
     await redis.setex("session:" + sessionToken, 86400, JSON.stringify({ userId: user.id, plan: user.plan }));
-    return res.json({ success: true, sessionToken, plan: user.plan });
+    return res.json({ success: true, sessionToken, plan: user.plan, isAdmin: !!user.is_admin });
   } catch (err) {
     secLog("error", "login_failed", { err: err.message });
     return res.status(500).json({ error: "Giriş başarısız." });
@@ -1027,6 +1028,72 @@ app.post("/api/delete-account", async (req, res) => {
   }
 });
 
+// ─── Admin middleware ───────────────────────────────────────────────────────
+async function requireAdmin(req, res, next) {
+  const sessionToken = req.headers["x-session-token"] || "";
+  if (!sessionToken) return res.status(401).json({ error: "Oturum bulunamadı." });
+  try {
+    const sessionData = await redis.get("session:" + sessionToken);
+    if (!sessionData) return res.status(401).json({ error: "Oturum süresi dolmuş." });
+    const { userId } = JSON.parse(sessionData);
+    const result = await db.query("SELECT is_admin FROM users WHERE id = $1", [userId]);
+    if (result.rows.length === 0 || !result.rows[0].is_admin) {
+      return res.status(403).json({ error: "Yetkiniz yok." });
+    }
+    req._adminUserId = userId;
+    next();
+  } catch (err) {
+    secLog("error", "admin_auth_failed", { err: err.message });
+    return res.status(500).json({ error: "Yetkilendirme hatası." });
+  }
+}
+// GET /admin/lookup?username=...
+app.get("/admin/lookup", requireAdmin, async (req, res) => {
+  const username = (req.query.username || "").toString();
+  if (!username) return res.status(400).json({ error: "Kullanıcı adı gerekli." });
+  try {
+    const usernameHash = crypto.createHash("sha256").update(username.toLowerCase().trim()).digest("hex");
+    const result = await db.query("SELECT plan, upload_count, last_active_at, created_at, is_admin FROM users WHERE username_hash = $1", [usernameHash]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    return res.json({ success: true, user: result.rows[0] });
+  } catch (err) {
+    secLog("error", "admin_lookup_failed", { err: err.message });
+    return res.status(500).json({ error: "Sorgu başarısız." });
+  }
+});
+// POST /admin/set-plan
+app.post("/admin/set-plan", requireAdmin, async (req, res) => {
+  const { username, plan } = req.body;
+  const ALLOWED_PLANS = ["free", "premium", "admin"];
+  if (!username || !ALLOWED_PLANS.includes(plan)) {
+    return res.status(400).json({ error: "Geçersiz istek." });
+  }
+  try {
+    const usernameHash = crypto.createHash("sha256").update(username.toLowerCase().trim()).digest("hex");
+    const result = await db.query("UPDATE users SET plan = $1 WHERE username_hash = $2 RETURNING id, plan", [plan, usernameHash]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    secLog("info", "admin_plan_changed", { adminUserId: req._adminUserId, targetPlan: plan });
+    return res.json({ success: true, plan: result.rows[0].plan });
+  } catch (err) {
+    secLog("error", "admin_set_plan_failed", { err: err.message });
+    return res.status(500).json({ error: "Güncelleme başarısız." });
+  }
+});
+// POST /admin/delete-user
+app.post("/admin/delete-user", requireAdmin, async (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: "Kullanıcı adı gerekli." });
+  try {
+    const usernameHash = crypto.createHash("sha256").update(username.toLowerCase().trim()).digest("hex");
+    const result = await db.query("DELETE FROM users WHERE username_hash = $1 RETURNING id", [usernameHash]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    secLog("info", "admin_user_deleted", { adminUserId: req._adminUserId });
+    return res.json({ success: true });
+  } catch (err) {
+    secLog("error", "admin_delete_user_failed", { err: err.message });
+    return res.status(500).json({ error: "Silme başarısız." });
+  }
+});
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });

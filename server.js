@@ -1105,6 +1105,56 @@ app.post("/admin/delete-user", requireAdmin, async (req, res) => {
     return res.status(500).json({ error: "Silme başarısız." });
   }
 });
+// ─── TEST/GELISTIRME MODU: Gercek Google Play Developer API hazir olunca ──────
+// bu fonksiyonu service account + googleapis ile gercek dogrulamaya cevir.
+// Su an purchaseToken'i her zaman "gecerli" kabul eder, sure productId'den hesaplanir.
+async function verifyGooglePurchase(purchaseToken, productId) {
+  const DURATIONS_DAYS = { premium_weekly: 7, premium_monthly: 30 };
+  const days = DURATIONS_DAYS[productId];
+  if (!days || !purchaseToken) return null;
+  return {
+    valid: true,
+    expiresAt: new Date(Date.now() + days * 24 * 60 * 60 * 1000),
+    autoRenewing: true,
+  };
+}
+// POST /api/verify-purchase
+app.post("/api/verify-purchase", async (req, res) => {
+  const sessionToken = req.headers["x-session-token"] || "";
+  if (!sessionToken) return res.status(401).json({ error: "Oturum bulunamadı." });
+  const { platform, productId, purchaseToken } = req.body || {};
+  const ALLOWED_PLATFORMS = ["google_play"];
+  const ALLOWED_PRODUCTS = ["premium_weekly", "premium_monthly"];
+  if (!ALLOWED_PLATFORMS.includes(platform)) return res.status(400).json({ error: "Desteklenmeyen platform." });
+  if (!ALLOWED_PRODUCTS.includes(productId)) return res.status(400).json({ error: "Geçersiz ürün." });
+  if (!purchaseToken) return res.status(400).json({ error: "purchaseToken gerekli." });
+  try {
+    const sessionData = await redis.get("session:" + sessionToken);
+    if (!sessionData) return res.status(401).json({ error: "Oturum süresi doldu. Lütfen tekrar giriş yapın.", sessionExpired: true });
+    const { userId } = JSON.parse(sessionData);
+
+    const verification = await verifyGooglePurchase(purchaseToken, productId);
+    if (!verification || !verification.valid) {
+      return res.status(400).json({ error: "Satın alma doğrulanamadı." });
+    }
+
+    await db.query(
+      `INSERT INTO subscriptions (user_id, platform, product_id, transaction_id, status, expires_at, auto_renewing)
+       VALUES ($1, $2, $3, $4, 'active', $5, $6)
+       ON CONFLICT (platform, transaction_id)
+       DO UPDATE SET status = 'active', expires_at = $5, auto_renewing = $6, updated_at = NOW()`,
+      [userId, platform, productId, purchaseToken, verification.expiresAt, verification.autoRenewing]
+    );
+
+    await db.query("UPDATE users SET plan = 'premium' WHERE id = $1", [userId]);
+
+    secLog("info", "purchase_verified", { userId, platform, productId });
+    return res.json({ success: true, plan: "premium", expiresAt: verification.expiresAt });
+  } catch (err) {
+    secLog("error", "verify_purchase_failed", { err: err.message });
+    return res.status(500).json({ error: "Doğrulama başarısız." });
+  }
+});
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });

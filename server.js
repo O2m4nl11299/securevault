@@ -1160,6 +1160,67 @@ app.post("/api/verify-purchase", async (req, res) => {
     return res.status(500).json({ error: "Doğrulama başarısız." });
   }
 });
+// ─── TEST/GELISTIRME MODU: Gercek Google Play RTDN entegrasyonu icin ──────────
+// service account hazir olunca, notificationType'a gore Google Play Developer
+// API'sinden GUNCEL durumu (gracePeriodEndDate vb.) cekip kullanmak daha dogru olur.
+// Su an basit bir notificationType -> status haritasi kullanilir.
+const RTDN_STATUS_MAP = {
+  1: "active",       // RECOVERED
+  2: "active",       // RENEWED
+  3: "cancelled",    // CANCELED - hala expires_at'e kadar erisimi var, sadece yenilenmeyecek
+  4: "active",       // PURCHASED
+  5: "on_hold",       // ON_HOLD
+  6: "grace_period",  // IN_GRACE_PERIOD
+  7: "active",       // RESTARTED
+  10: "paused",      // PAUSED
+  12: "revoked",     // REVOKED - aninda erisim kesilir
+  13: "expired",     // EXPIRED
+};
+// Bu durumlar premium erisim verir (cancelled dahil - donem bitene kadar erisim suer)
+const RTDN_GRANTS_PREMIUM = new Set(["active", "grace_period", "on_hold", "cancelled"]);
+// POST /api/google-rtdn — Google Cloud Pub/Sub push subscription buraya gonderir
+app.post("/api/google-rtdn", async (req, res) => {
+  try {
+    const message = req.body && req.body.message;
+    if (!message || !message.data) {
+      return res.status(400).json({ error: "Geçersiz Pub/Sub mesajı." });
+    }
+    if (process.env.ALLOW_FAKE_PURCHASE_VERIFICATION !== "true") {
+      secLog("warn", "rtdn_received_but_stub_disabled", {});
+      return res.status(200).json({ ok: true });
+    }
+    const decoded = Buffer.from(message.data, "base64").toString("utf8");
+    const payload = JSON.parse(decoded);
+    const notif = payload.subscriptionNotification;
+    if (!notif || !notif.purchaseToken) {
+      return res.status(200).json({ ok: true });
+    }
+    const newStatus = RTDN_STATUS_MAP[notif.notificationType] || null;
+    if (!newStatus) {
+      return res.status(200).json({ ok: true });
+    }
+    const sub = await db.query(
+      "SELECT user_id FROM subscriptions WHERE platform='google_play' AND transaction_id=$1",
+      [notif.purchaseToken]
+    );
+    if (sub.rows.length === 0) {
+      secLog("warn", "rtdn_unknown_purchase_token", {});
+      return res.status(200).json({ ok: true });
+    }
+    const userId = sub.rows[0].user_id;
+    await db.query(
+      "UPDATE subscriptions SET status=$1, updated_at=NOW() WHERE platform='google_play' AND transaction_id=$2",
+      [newStatus, notif.purchaseToken]
+    );
+    const planShouldBe = RTDN_GRANTS_PREMIUM.has(newStatus) ? "premium" : "free";
+    await db.query("UPDATE users SET plan=$1 WHERE id=$2", [planShouldBe, userId]);
+    secLog("info", "rtdn_processed", { userId, newStatus, notificationType: notif.notificationType });
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    secLog("error", "rtdn_failed", { err: err.message });
+    return res.status(500).json({ error: "Webhook işleme hatası." });
+  }
+});
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });

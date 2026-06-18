@@ -1109,6 +1109,11 @@ app.post("/admin/delete-user", requireAdmin, async (req, res) => {
 // bu fonksiyonu service account + googleapis ile gercek dogrulamaya cevir.
 // Su an purchaseToken'i her zaman "gecerli" kabul eder, sure productId'den hesaplanir.
 async function verifyGooglePurchase(purchaseToken, productId) {
+  // Guvenlik kapisi: gercek Google API hazir olana kadar varsayilan KAPALI.
+  // Test etmek icin .env'de ALLOW_FAKE_PURCHASE_VERIFICATION=true yapip servisi yeniden baslat.
+  if (process.env.ALLOW_FAKE_PURCHASE_VERIFICATION !== "true") {
+    return null;
+  }
   const DURATIONS_DAYS = { premium_weekly: 7, premium_monthly: 30 };
   const days = DURATIONS_DAYS[productId];
   if (!days || !purchaseToken) return null;

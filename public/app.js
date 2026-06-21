@@ -1193,6 +1193,54 @@ async function getBrowserFingerprint() {
         alrt.className="alert success"; alrt.textContent="Plan güncellendi: " + data.plan;
       } catch(e) { alrt.className="alert error"; alrt.textContent="Bağlantı hatası."; }
     });
+    function renderAdminUsersTable(users) {
+      var tbody = document.getElementById("adminUsersTableBody");
+      var now = Date.now();
+      var html = users.map(function(u) {
+        var isActive = (now - new Date(u.last_active_at).getTime()) < 24 * 60 * 60 * 1000;
+        var rowClass = isActive ? "admin-row-active" : "";
+        var shortId = u.id.slice(0, 8);
+        var created = new Date(u.created_at).toLocaleDateString("tr-TR");
+        var lastActive = new Date(u.last_active_at).toLocaleString("tr-TR");
+        var grantBtn = (u.plan === "premium" || u.plan === "admin")
+          ? ""
+          : '<button class="btn secondary admin-grant-btn" data-userid="' + u.id + '">Premium Ver</button>';
+        return '<tr class="' + rowClass + '"><td>' + shortId + '</td><td>' + u.plan + '</td><td>' + created + '</td><td>' + lastActive + '</td><td>' + grantBtn + '</td></tr>';
+      }).join("");
+      tbody.innerHTML = html;
+      document.querySelectorAll(".admin-grant-btn").forEach(function(btn) {
+        btn.addEventListener("click", async function() {
+          var userId = btn.getAttribute("data-userid");
+          if (!confirm("Bu kullanıcıya 30 günlük premium tanımlamak istediğinize emin misiniz?")) return;
+          btn.disabled = true;
+          try {
+            var res = await fetch("/admin/grant-premium", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-session-token": sessionStorage.getItem("sv_session") || "" },
+              body: JSON.stringify({ userId: userId })
+            });
+            var data = await res.json();
+            if (!res.ok) { alert(data.error || "Hata oluştu."); btn.disabled = false; return; }
+            loadAdminUsersList();
+          } catch(e) { alert("Bağlantı hatası."); btn.disabled = false; }
+        });
+      });
+    }
+    async function loadAdminUsersList() {
+      var alrt = document.getElementById("adminUsersListAlert");
+      alrt.className = "alert"; alrt.textContent = "";
+      try {
+        var res = await fetch("/admin/users-list", {
+          headers: { "x-session-token": sessionStorage.getItem("sv_session") || "" }
+        });
+        var data = await res.json();
+        if (!res.ok) { alrt.className="alert error"; alrt.textContent=data.error; return; }
+        document.getElementById("adminUsersListBox").style.display = "block";
+        renderAdminUsersTable(data.users);
+      } catch(e) { alrt.className="alert error"; alrt.textContent="Bağlantı hatası."; }
+    }
+    var adminListUsersBtn = document.getElementById("adminListUsersBtn");
+    if (adminListUsersBtn) adminListUsersBtn.addEventListener("click", loadAdminUsersList);
     var adminDeleteUserBtn = document.getElementById("adminDeleteUserBtn");
     if (adminDeleteUserBtn) adminDeleteUserBtn.addEventListener("click", async function() {
       var u = document.getElementById("adminSearchUsername").value.trim();

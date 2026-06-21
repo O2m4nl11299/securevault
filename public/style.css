@@ -170,3 +170,11 @@
 .csp-41 { color:#ff6b6b; }
 .csp-42 { margin-top:24px; }
 .csp-43 { color:var(--green);text-decoration:none; }
+
+/* ---- Admin: Tum Kullanicilar listesi ---- */
+.admin-hidden { display: none; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 16px; }
+.admin-table th, .admin-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border-bright); }
+.admin-table th { color: var(--text-dim); font-weight: 500; font-size: 11px; letter-spacing: 1px; }
+.admin-row-active { color: var(--green); }
+.admin-row-active td { color: var(--green); }

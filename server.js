@@ -1105,6 +1105,43 @@ app.post("/admin/delete-user", requireAdmin, async (req, res) => {
     return res.status(500).json({ error: "Silme başarısız." });
   }
 });
+// GET /admin/users-list
+app.get("/admin/users-list", requireAdmin, async (req, res) => {
+  try {
+    const result = await db.query(
+      "SELECT id, plan, created_at, last_active_at FROM users ORDER BY created_at DESC LIMIT 1000"
+    );
+    return res.json({ success: true, users: result.rows });
+  } catch (err) {
+    secLog("error", "admin_users_list_failed", { err: err.message });
+    return res.status(500).json({ error: "Liste alınamadı." });
+  }
+});
+// POST /admin/grant-premium — hedef kullanıcıya 30 günlük premium tanır (admin manuel verme)
+app.post("/admin/grant-premium", requireAdmin, async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: "userId gerekli." });
+  try {
+    const userCheck = await db.query("SELECT id FROM users WHERE id = $1", [userId]);
+    if (userCheck.rows.length === 0) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
+
+    const transactionId = "admin-grant-" + crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    await db.query(
+      `INSERT INTO subscriptions (user_id, platform, product_id, transaction_id, status, expires_at, auto_renewing)
+       VALUES ($1, 'admin_grant', 'admin_monthly', $2, 'active', $3, false)`,
+      [userId, transactionId, expiresAt]
+    );
+    await db.query("UPDATE users SET plan = 'premium' WHERE id = $1", [userId]);
+
+    secLog("info", "admin_premium_granted", { adminUserId: req._adminUserId, targetUserId: userId, expiresAt });
+    return res.json({ success: true, plan: "premium", expiresAt });
+  } catch (err) {
+    secLog("error", "admin_grant_premium_failed", { err: err.message });
+    return res.status(500).json({ error: "İşlem başarısız." });
+  }
+});
 // ─── TEST/GELISTIRME MODU: Gercek Google Play Developer API hazir olunca ──────
 // bu fonksiyonu service account + googleapis ile gercek dogrulamaya cevir.
 // Su an purchaseToken'i her zaman "gecerli" kabul eder, sure productId'den hesaplanir.

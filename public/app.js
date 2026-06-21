@@ -220,8 +220,8 @@ async function getBrowserFingerprint() {
   // ─── Dosya / Metin mod geçişi (aynı panel, aynı alert/log altyapısı) ───────
   function setUploadMode(mode) {
     uploadMode = mode;
-    document.getElementById('fileModeSection').style.display = (mode === 'file') ? '' : 'none';
-    document.getElementById('textModeSection').style.display = (mode === 'text') ? '' : 'none';
+    document.getElementById('fileModeSection').style.display = (mode === 'file') ? 'block' : 'none';
+    document.getElementById('textModeSection').style.display = (mode === 'text') ? 'block' : 'none';
     checkEncryptReady();
   }
   var fileModeTabBtn = document.getElementById('fileModeTabBtn');
@@ -1034,7 +1034,7 @@ async function getBrowserFingerprint() {
     }
     if (sessionStorage.getItem("sv_is_admin") === "true") {
       var adminTabBtn0 = document.getElementById("adminTabBtn");
-      if (adminTabBtn0) adminTabBtn0.style.display = "";
+      if (adminTabBtn0) adminTabBtn0.style.display = "block";
     }
     var showReg = document.getElementById("showRegister");
     var showLog = document.getElementById("showLogin");
@@ -1072,7 +1072,7 @@ async function getBrowserFingerprint() {
         sessionStorage.setItem("sv_plan", data.plan);
         sessionStorage.setItem("sv_is_admin", data.isAdmin ? "true" : "false");
         var adminTabBtn1 = document.getElementById("adminTabBtn");
-        if (adminTabBtn1) adminTabBtn1.style.display = data.isAdmin ? "" : "none";
+        if (adminTabBtn1) adminTabBtn1.style.display = data.isAdmin ? "block" : "none";
         document.getElementById("accountPlan").textContent = data.plan;
         showAuthForm("account");
         alrt.className="alert success"; alrt.textContent="Giriş başarılı! Plan: " + data.plan;

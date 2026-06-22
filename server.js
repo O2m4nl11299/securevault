@@ -383,6 +383,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/kvkk", (req, res) => res.sendFile(path.join(__dirname, "public", "kvkk.html")));
 app.get("/sozlesme", (req, res) => res.sendFile(path.join(__dirname, "public", "sozlesme.html")));
+app.get("/sartlar", (req, res) => res.sendFile(path.join(__dirname, "public", "sartlar.html")));
 app.get("/health", async (req, res) => {
   try {
     await redis.ping();

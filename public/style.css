@@ -178,3 +178,14 @@
 .admin-table th { color: var(--text-dim); font-weight: 500; font-size: 11px; letter-spacing: 1px; }
 .admin-row-active { color: var(--green); }
 .admin-row-active td { color: var(--green); }
+
+/* ─── Bilgi sayfalari (kvkk, sozlesme, sartlar) ─── */
+.legal-wrap { max-width: 820px; margin: 0 auto; padding: 48px 40px; }
+.legal-back { display: inline-block; margin-bottom: 28px; color: var(--green); text-decoration: none; font-size: 11px; letter-spacing: 1px; }
+.legal-back:hover { text-shadow: 0 0 8px var(--green-glow); }
+.legal-wrap h1 { color: var(--green); font-size: 20px; letter-spacing: 2px; margin-bottom: 8px; }
+.legal-wrap h2 { color: var(--green); font-size: 14px; letter-spacing: 1px; margin-top: 32px; margin-bottom: 8px; }
+.legal-wrap p { margin: 12px 0; font-size: 13px; line-height: 1.8; color: var(--text); }
+.legal-wrap a { color: var(--green); }
+.legal-meta { color: var(--text-dim); font-size: 12px; }
+.legal-note { color: var(--text-dim); font-style: italic; font-size: 12px; margin-top: 32px; border-top: 1px solid var(--border); padding-top: 16px; }

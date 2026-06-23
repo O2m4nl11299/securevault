@@ -199,6 +199,22 @@ async function getBrowserFingerprint() {
     content.appendChild(t); content.appendChild(h);
     document.getElementById('dropzone').classList.remove('has-file'); checkEncryptReady();
   }
+  function clearFolder(e) {
+    e.stopPropagation();
+    folderFiles = [];
+    var fi = document.getElementById('folderInput');
+    if (fi) fi.value = '';
+    var fContent = document.getElementById('folderDropContent');
+    if (fContent) {
+      fContent.textContent = '';
+      var t = document.createElement('div'); t.className = 'dropzone-text'; t.textContent = 'Klasör seçmek için tıkla';
+      var h = document.createElement('div'); h.className = 'dropzone-hint'; h.textContent = 'Klasör tek bir .zip dosyası olarak şifrelenip gönderilir. Alıcı zip\'i kendi açar.';
+      fContent.appendChild(t); fContent.appendChild(h);
+    }
+    var fdz = document.getElementById('folderDropzone');
+    if (fdz) fdz.classList.remove('has-file');
+    checkEncryptReady();
+  }
 
   var EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
   function isValidEmail(e) { return e && typeof e === 'string' && e.length <= 254 && EMAIL_REGEX.test(e); }
@@ -207,6 +223,9 @@ async function getBrowserFingerprint() {
     if (uploadMode === 'text') {
       var txtVal = document.getElementById('textInput').value;
       document.getElementById('encryptBtn').disabled = !(txtVal.trim().length > 0 && emailOk);
+    } else if (uploadMode === 'folder') {
+      var ff = (window.__getFolderFiles && window.__getFolderFiles()) || [];
+      document.getElementById('encryptBtn').disabled = !(ff.length > 0 && emailOk);
     } else {
       document.getElementById('encryptBtn').disabled = !(selectedFile && emailOk);
     }
@@ -222,12 +241,55 @@ async function getBrowserFingerprint() {
     uploadMode = mode;
     document.getElementById('fileModeSection').style.display = (mode === 'file') ? 'block' : 'none';
     document.getElementById('textModeSection').style.display = (mode === 'text') ? 'block' : 'none';
+    var fms = document.getElementById('folderModeSection');
+    if (fms) fms.style.display = (mode === 'folder') ? 'block' : 'none';
     checkEncryptReady();
   }
   var fileModeTabBtn = document.getElementById('fileModeTabBtn');
   if (fileModeTabBtn) fileModeTabBtn.addEventListener('click', function() { setUploadMode('file'); });
   var textModeTabBtn = document.getElementById('textModeTabBtn');
   if (textModeTabBtn) textModeTabBtn.addEventListener('click', function() { setUploadMode('text'); });
+  var folderModeTabBtn = document.getElementById('folderModeTabBtn');
+  if (folderModeTabBtn) folderModeTabBtn.addEventListener('click', function() { setUploadMode('folder'); });
+  var folderFiles = [];
+  var folderInputEl = document.getElementById('folderInput');
+  if (folderInputEl) {
+    folderInputEl.addEventListener('change', function(e) {
+      folderFiles = Array.from(e.target.files || []);
+      // Secilen klasoru KUTU ICINDE goster (input'u silmeden, folderDropContent guncelle).
+      if (folderFiles.length > 0) {
+        var rootName = 'klasor';
+        if (folderFiles[0].webkitRelativePath) {
+          var rp = folderFiles[0].webkitRelativePath.split('/');
+          if (rp.length > 0 && rp[0]) rootName = rp[0];
+        }
+        var totalBytes = 0;
+        for (var i = 0; i < folderFiles.length; i++) { totalBytes += folderFiles[i].size; }
+        var mb = (totalBytes / (1024 * 1024)).toFixed(2);
+        var fContent = document.getElementById('folderDropContent');
+        if (fContent) {
+          fContent.textContent = '';
+          var ftxt = document.createElement('div');
+          ftxt.className = 'dropzone-text';
+          ftxt.textContent = '✅ 📁 ' + rootName;
+          var fhint = document.createElement('div');
+          fhint.className = 'dropzone-hint';
+          fhint.textContent = folderFiles.length + ' dosya • ' + mb + ' MB • değiştirmek için tıkla';
+          var fclear = document.createElement('button');
+          fclear.className = 'file-clear';
+          fclear.textContent = '✕';
+          fclear.addEventListener('click', function(ev) { clearFolder(ev); });
+          fContent.appendChild(ftxt);
+          fContent.appendChild(fhint);
+          fContent.appendChild(fclear);
+        }
+        var fdz1 = document.getElementById('folderDropzone');
+        if (fdz1) fdz1.classList.add('has-file');
+      }
+      checkEncryptReady();
+    });
+  }
+  window.__getFolderFiles = function() { return folderFiles; };
 
   var dz = document.getElementById('dropzone');
   dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
@@ -672,6 +734,28 @@ async function getBrowserFingerprint() {
       if (!textVal.trim()) return;
       selectedFile = new File([new Blob([textVal], { type: 'text/plain' })], 'metin.txt', { type: 'text/plain' });
     }
+    if (uploadMode === 'folder') {
+      var ff = (window.__getFolderFiles && window.__getFolderFiles()) || [];
+      if (!ff.length) return;
+      // Klasor adini ilk dosyanin yolundan al (webkitRelativePath: "Klasor/alt/dosya.txt")
+      var rootName = 'klasor';
+      if (ff[0].webkitRelativePath) {
+        var rp = ff[0].webkitRelativePath.split('/');
+        if (rp.length > 0 && rp[0]) rootName = rp[0];
+      }
+      try {
+        var zip = new JSZip();
+        for (var i = 0; i < ff.length; i++) {
+          var relPath = ff[i].webkitRelativePath || ff[i].name;
+          zip.file(relPath, ff[i]);
+        }
+        // SIKISTIRMASIZ (store) - mobil ile ayni: hizli, sadece paketler.
+        var zipBlob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+        selectedFile = new File([zipBlob], rootName + '.zip', { type: 'application/zip' });
+      } catch (zipErr) {
+        return;
+      }
+    }
     if (!selectedFile || !isValidEmail(email) || isUploading) return;
     // Boyut kontrolü
     var svSession = sessionStorage.getItem('sv_session');
@@ -982,6 +1066,14 @@ async function getBrowserFingerprint() {
       if (e.target.closest('.file-clear')) return;
       document.getElementById('fileInput').click();
     });
+    // Folder dropzone click → folder input
+    var folderDz = document.getElementById('folderDropzone');
+    if (folderDz) {
+      folderDz.addEventListener('click', function(e) {
+        if (e.target.closest('.file-clear')) return;
+        document.getElementById('folderInput').click();
+      });
+    }
 
     // File input change
     document.getElementById('fileInput').addEventListener('change', function() {

@@ -39,6 +39,7 @@
     <button class="tab active tab-upload" data-tab="upload" id="fileModeTabBtn"><span class="tab-number">01</span>DOSYA YÜKLE &amp; GÖNDER</button>
     <button class="tab tab-decrypt" data-tab="decrypt"><span class="tab-number">02</span>ŞİFRELİ DOSYAYI ÇÖZ</button>
     <button class="tab tab-text" data-tab="upload" id="textModeTabBtn"><span class="tab-number">03</span>METİN ŞİFRELE</button>
+    <button class="tab tab-folder" data-tab="upload" id="folderModeTabBtn"><span class="tab-number">04</span>KLASÖR GÖNDER</button>
     <button class="tab tab-info" data-tab="info"><span class="tab-number">04</span>GÜVENLİK</button>
     <button class="tab tab-why" data-tab="why"><span class="tab-number">05</span>NEDEN BİZ?</button>
     <button class="tab tab-auth" data-tab="auth"><span class="tab-number">06</span>ÜYE OL / GİRİŞ</button>
@@ -64,6 +65,19 @@
       <div class="card">
         <textarea id="textInput" placeholder="Şifrelemek istediğiniz metni buraya yazın veya yapıştırın..." rows="8" class="csp-5"></textarea>
         <div id="textInputCounter" class="csp-6">0 karakter</div>
+      </div>
+    </div>
+    <div id="folderModeSection" class="csp-2">
+      <div class="section-label">KLASÖR SEÇ</div>
+      <div class="card csp-3">
+        <div class="dropzone" id="folderDropzone">
+          <input type="file" id="folderInput" webkitdirectory directory multiple class="csp-4">
+          <span class="dropzone-icon">🗂️</span>
+          <div id="folderDropContent">
+            <div class="dropzone-text">Klasör seçmek için tıkla</div>
+            <div class="dropzone-hint">Klasör tek bir .zip dosyası olarak şifrelenip gönderilir. Alıcı zip'i kendi açar.</div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="section-label csp-7">ALICI BİLGİLERİ</div>
@@ -120,6 +134,7 @@
     <div class="section-label">KRİPTOGRAFİ</div>
     <div class="card">
       <div class="crypto-row"><span class="crypto-key">ALGORİTMA</span><span class="crypto-val">AES-256-GCM</span></div>
+      <div class="crypto-row"><span class="crypto-key">KUANTUM DİRENCİ</span><span class="crypto-val">VAR</span></div>
       <div class="crypto-row"><span class="crypto-key">ANAHTAR</span><span class="crypto-val">256-bit CSPRNG</span></div>
       <div class="crypto-row"><span class="crypto-key">NONCE/IV</span><span class="crypto-val">96-bit CSPRNG (per chunk)</span></div>
       <div class="crypto-row"><span class="crypto-key">AUTH TAG</span><span class="crypto-val">128-bit (per chunk)</span></div>
@@ -266,6 +281,7 @@
       <div class="crypto-row"><span class="crypto-key">🗑️ TEK KULLANIM</span><span class="crypto-val">İndirildikten sonra token atomik olarak silinir.</span></div>
       <div class="crypto-row"><span class="crypto-key">🔑 EK ŞİFRE</span><span class="crypto-val">İkinci güvenlik katmanı — SMS ile iletin.</span></div>
       <div class="crypto-row"><span class="crypto-key">☁️ CLOUDFLARE R2</span><span class="crypto-val">Küresel CDN altyapısı. Sıfır egress ücreti.</span></div>
+      <div class="crypto-row"><span class="crypto-key">🔬 KUANTUM DİRENCİ</span><span class="crypto-val">AES-256-GCM simetrik şifrelemesi kuantum bilgisayarlara karşı da güvenli kabul edilir. Anahtarlar cihazınızda üretilir; ağ üzerinden asimetrik anahtar değişimi yapılmaz.</span></div>
     </div>
     <div class="section-label csp-42">VİRÜS TARAMASI HAKKINDA</div>
     <div class="card">
@@ -287,6 +303,7 @@
 </main>
 <footer>SECUREVAULT v2.9 · AES-256-GCM · ZERO-KNOWLEDGE · STREAM DECRYPT · WEB CRYPTO API · <a href="https://github.com/O2m4nl11299/securevault" target="_blank" class="csp-43">AÇIK KAYNAK</a></footer>
 
+<script src="/jszip.min.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

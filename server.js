@@ -75,9 +75,9 @@ const PLAN_FILE_LIMITS = {
   admin: 20 * 1024 * 1024 * 1024,    // 20 GB (sadece admin hesaplar icin, streaming yolu)
 };
 const PLAN_SEND_LIMITS = {
-  anon: 3,   // 24 saatte 3 gonderim
-  free: 4,   // 24 saatte 4 gonderim
-  // premium: sinirsiz (kontrol yok)
+  anon: 3,    // 24 saatte 3 gonderim (anonim yukleme kapali, kullanilmiyor)
+  free: 4,    // 24 saatte 4 gonderim
+  premium: 20, // 24 saatte 20 gonderim
 };
 
 // R2 multipart minimum part size — son part hariç
@@ -564,9 +564,26 @@ app.post("/upload/init", uploadLimiter, async (req, res) => {
     const freeKey = "free_uploads:" + userId;
     const fcount = parseInt(await redis.get(freeKey) || "0");
     if (fcount >= PLAN_SEND_LIMITS.free) {
-      return res.status(403).json({ error: "Günlük gönderim hakkınız doldu. Premium'a geçerek sınırsız gönderin.", upgrade: true });
+      return res.status(403).json({ error: "Günlük gönderim hakkınız doldu. Premium'a geçerek daha fazla gönderin.", upgrade: true });
     }
     req._freeKey = freeKey;
+  } else if (userPlan === "premium") {
+    const premiumKey = "premium_uploads:" + userId;
+    const pcount = parseInt(await redis.get(premiumKey) || "0");
+    if (pcount >= PLAN_SEND_LIMITS.premium) {
+      return res.status(403).json({ error: "Günlük gönderim limitinize ulaştınız (20/gün). Yarın tekrar deneyebilirsiniz." });
+    }
+    req._premiumKey = premiumKey;
+  }
+  // ESZAMANLI YUKLEME YASAGI: ayni hesap ayni anda tek yukleme yapabilir.
+  // Normal bitiste finalize kilidi siler; coken/yarim kalan yukleme icin
+  // 15 dk (900 sn) guvenlik agi TTL'i kilidi otomatik acar.
+  if (userId) {
+    const lockKey = "upload_lock:" + userId;
+    const locked = await redis.set(lockKey, "1", "NX", "EX", 900);
+    if (locked === null) {
+      return res.status(409).json({ error: "Zaten devam eden bir yüklemeniz var. Lütfen tamamlanmasını bekleyin." });
+    }
   }
   const uploadId = uuidv4();
   const r2Key = `${uuidv4()}.enc`;
@@ -696,6 +713,10 @@ app.post("/upload/finalize/:uploadId", async (req, res) => {
   }
 
   session.finalized = true;
+  // ESZAMANLI KILIDI KALDIR: bu hesabin yuklemesi tamamlaniyor.
+  if (session.userId) {
+    try { await redis.del("upload_lock:" + session.userId); } catch (e) {}
+  }
 
   try {
     // 1. Kalan buffer'ı son part olarak gönder (5MB'dan küçük olabilir — son part için OK)
@@ -771,6 +792,10 @@ app.post("/upload/finalize/:uploadId", async (req, res) => {
     const freeKey = "free_uploads:" + session.userId;
     await redis.incr(freeKey);
     await redis.expire(freeKey, 86400);
+  } else if (session.userPlan === "premium" && session.userId) {
+    const premiumKey = "premium_uploads:" + session.userId;
+    await redis.incr(premiumKey);
+    await redis.expire(premiumKey, 86400);
   }
   res.json({ token, ttl: TOKEN_TTL_SECONDS });
 });

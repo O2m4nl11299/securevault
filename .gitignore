@@ -149,3 +149,4 @@ vite.config.ts.timestamp-*
 .bash_logout
 .profile
 .cloud-locale-test.skip
+server.js.bak-*

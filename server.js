@@ -419,6 +419,10 @@ app.post("/upload", uploadLimiter, upload.single("encryptedFile"), async (req, r
   if (sessionTokenCL && userPlanCL === "anon") {
     return res.status(401).json({ error: "Oturum süresi doldu. Lütfen tekrar giriş yapın.", sessionExpired: true });
   }
+  // ANONIM YUKLEME KAPALI: gecerli oturum yoksa reddet.
+  if (userPlanCL === "anon") {
+    return res.status(401).json({ error: "Dosya göndermek için giriş yapmanız gerekiyor.", loginRequired: true });
+  }
   // Dosya boyutu kontrolu (plan bazli)
   const maxSizeCL = PLAN_FILE_LIMITS[userPlanCL] || PLAN_FILE_LIMITS.free;
   if (req.file.size > maxSizeCL) {
@@ -542,6 +546,10 @@ app.post("/upload/init", uploadLimiter, async (req, res) => {
   }
   if (sessionToken && userPlan === "anon") {
     return res.status(401).json({ error: "Oturum süresi doldu. Lütfen tekrar giriş yapın.", sessionExpired: true });
+  }
+  // ANONIM YUKLEME KAPALI: gecerli oturum yoksa reddet.
+  if (userPlan === "anon") {
+    return res.status(401).json({ error: "Dosya göndermek için giriş yapmanız gerekiyor.", loginRequired: true });
   }
   const maxFileSize = PLAN_FILE_LIMITS[userPlan] || PLAN_FILE_LIMITS.free;
   if (userPlan === "anon") {

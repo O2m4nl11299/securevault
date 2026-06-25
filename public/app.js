@@ -728,6 +728,17 @@ async function getBrowserFingerprint() {
   // ─── Encrypt & Upload ──────────────────────────────────────────────────────
 
   window.encryptAndSend = async function() {
+    // ANONIM YUKLEME KAPALI: once giris zorunlu.
+    if (!sessionStorage.getItem('sv_session')) {
+      var alrtLR = document.getElementById('uploadAlert');
+      if (alrtLR) {
+        alrtLR.className = 'alert error';
+        alrtLR.textContent = 'Dosya göndermek için önce giriş yapmalısınız. "ÜYE OL / GİRİŞ" sekmesinden giriş yapın.';
+      }
+      var authTab = document.querySelector('[data-tab="auth"]');
+      if (authTab) authTab.click();
+      return;
+    }
     var email = document.getElementById('recipientEmail').value.trim();
     if (uploadMode === 'text') {
       var textVal = document.getElementById('textInput').value;

@@ -1102,6 +1102,87 @@ app.get("/admin/lookup", requireAdmin, async (req, res) => {
   }
 });
 // POST /admin/set-plan
+// ════════════════════════════════════════════════════════════════════
+// POST /billing/verify — Play Store abonelik satin almasini DOGRULA
+// Mobil uygulama, satin alma sonrasi purchaseToken'i buraya gonderir.
+// Sunucu Google Play Developer API ile dogrular; gecerliyse kullaniciyi
+// premium yapar. ISTEMCIYE GUVENME - her zaman sunucu dogrular.
+// ════════════════════════════════════════════════════════════════════
+app.post("/billing/verify", async (req, res) => {
+  // 1) Oturum kontrolu - giris yapmis kullanici olmali
+  const sessionToken = req.headers["x-session-token"] || "";
+  if (!sessionToken) {
+    return res.status(401).json({ error: "Giris yapmaniz gerekiyor." });
+  }
+  let userId = null;
+  try {
+    const sessionData = await redis.get("session:" + sessionToken);
+    if (!sessionData) {
+      return res.status(401).json({ error: "Oturum suresi doldu.", sessionExpired: true });
+    }
+    userId = JSON.parse(sessionData).userId;
+  } catch (e) {
+    return res.status(401).json({ error: "Gecersiz oturum." });
+  }
+  if (!userId) {
+    return res.status(401).json({ error: "Gecersiz oturum." });
+  }
+
+  // 2) Satin alma bilgilerini al
+  const { productId, purchaseToken, source } = req.body;
+  if (!productId || !purchaseToken) {
+    return res.status(400).json({ error: "Eksik satin alma bilgisi." });
+  }
+  if (productId !== "premium_monthly") {
+    return res.status(400).json({ error: "Bilinmeyen urun." });
+  }
+
+  // 3) GOOGLE DOGRULAMASI [PLACEHOLDER]
+  // ─────────────────────────────────────────────────────────────────
+  // TODO: Google Play Developer API ile dogrulama. Gerekenler:
+  //   - Google Cloud servis hesabi (JSON anahtar)
+  //   - googleapis npm paketi
+  //   - androidpublisher.purchases.subscriptions.get cagrisi
+  //   - Donen 'paymentState' / 'expiryTimeMillis' kontrolu
+  // Bu kurulum tamamlanana kadar, GUVENLIK GEREGI premium VERILMEZ.
+  // Sahte/dogrulanmamis satin alma ile premium asla aktiflesmemeli.
+  const GOOGLE_VERIFICATION_ENABLED = false;
+  if (!GOOGLE_VERIFICATION_ENABLED) {
+    secLog("info", "billing_verify_pending", { userId, productId });
+    return res.status(503).json({
+      error: "Satin alma dogrulamasi henuz aktif degil. Lutfen daha sonra tekrar deneyin.",
+      pending: true,
+    });
+  }
+
+  // 4) DOGRULAMA BASARILI -> kullaniciyi premium yap
+  //    (Google verification acildiginda burasi calisir.)
+  try {
+    const result = await db.query(
+      "UPDATE users SET plan = $1 WHERE id = $2 RETURNING id, plan",
+      ["premium", userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Kullanici bulunamadi." });
+    }
+    // Session'daki plani da guncelle (bir sonraki istekte premium gorunsun)
+    try {
+      const sd = await redis.get("session:" + sessionToken);
+      if (sd) {
+        const parsed = JSON.parse(sd);
+        parsed.plan = "premium";
+        const ttl = await redis.ttl("session:" + sessionToken);
+        await redis.setex("session:" + sessionToken, ttl > 0 ? ttl : 86400, JSON.stringify(parsed));
+      }
+    } catch (e) {}
+    secLog("info", "billing_premium_activated", { userId });
+    return res.json({ success: true, plan: "premium" });
+  } catch (err) {
+    secLog("error", "billing_verify_failed", { err: err.message });
+    return res.status(500).json({ error: "Dogrulama sirasinda hata olustu." });
+  }
+});
+
 app.post("/admin/set-plan", requireAdmin, async (req, res) => {
   const { username, plan } = req.body;
   const ALLOWED_PLANS = ["free", "premium", "admin"];

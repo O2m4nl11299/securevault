@@ -35,6 +35,49 @@ const multer = require("multer");
 const { v4: uuidv4 } = require("uuid");
 const Redis = require("ioredis");
 const nodemailer = require("nodemailer");
+const { google } = require("googleapis");
+
+// ── Google Play abonelik dogrulama yardimcisi ──────────────────────
+// Servis hesabi JSON anahtari .env'deki GOOGLE_SERVICE_ACCOUNT_KEY
+// yolundan okunur. Anahtar ayarli degilse dogrulama PASIF (premium verilmez).
+let _androidPublisher = null;
+function getAndroidPublisher() {
+  if (_androidPublisher) return _androidPublisher;
+  const keyFile = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (!keyFile) return null;
+  const auth = new google.auth.GoogleAuth({
+    keyFile,
+    scopes: ["https://www.googleapis.com/auth/androidpublisher"],
+  });
+  _androidPublisher = google.androidpublisher({ version: "v3", auth });
+  return _androidPublisher;
+}
+
+// Aboneligi Google'a dogrula. Gecerli + odenmis + suresi gecmemis ise true.
+async function verifyGooglePlaySubscription(packageName, productId, purchaseToken) {
+  const publisher = getAndroidPublisher();
+  if (!publisher) {
+    return { ok: false, reason: "verification_disabled" };
+  }
+  try {
+    const resp = await publisher.purchases.subscriptions.get({
+      packageName,
+      subscriptionId: productId,
+      token: purchaseToken,
+    });
+    const d = resp.data || {};
+    // paymentState: 0=odeme bekliyor, 1=odendi, 2=deneme, 3=ertelenmis yukseltme
+    const paid = d.paymentState === 1 || d.paymentState === 2;
+    const expiry = parseInt(d.expiryTimeMillis || "0", 10);
+    const notExpired = expiry > Date.now();
+    if (paid && notExpired) {
+      return { ok: true, expiry };
+    }
+    return { ok: false, reason: "not_active", paymentState: d.paymentState, expiry };
+  } catch (err) {
+    return { ok: false, reason: "api_error", message: err.message };
+  }
+}
 const path = require("path");
 const crypto = require("crypto");
 
@@ -1137,21 +1180,24 @@ app.post("/billing/verify", async (req, res) => {
     return res.status(400).json({ error: "Bilinmeyen urun." });
   }
 
-  // 3) GOOGLE DOGRULAMASI [PLACEHOLDER]
+  // 3) GOOGLE DOGRULAMASI — Play Developer API ile gercek dogrulama
   // ─────────────────────────────────────────────────────────────────
-  // TODO: Google Play Developer API ile dogrulama. Gerekenler:
-  //   - Google Cloud servis hesabi (JSON anahtar)
-  //   - googleapis npm paketi
-  //   - androidpublisher.purchases.subscriptions.get cagrisi
-  //   - Donen 'paymentState' / 'expiryTimeMillis' kontrolu
-  // Bu kurulum tamamlanana kadar, GUVENLIK GEREGI premium VERILMEZ.
-  // Sahte/dogrulanmamis satin alma ile premium asla aktiflesmemeli.
-  const GOOGLE_VERIFICATION_ENABLED = false;
-  if (!GOOGLE_VERIFICATION_ENABLED) {
-    secLog("info", "billing_verify_pending", { userId, productId });
-    return res.status(503).json({
-      error: "Satin alma dogrulamasi henuz aktif degil. Lutfen daha sonra tekrar deneyin.",
-      pending: true,
+  // Servis hesabi anahtari ayarli degilse (GOOGLE_SERVICE_ACCOUNT_KEY),
+  // dogrulama PASIF kalir ve premium VERILMEZ (guvenli varsayilan).
+  const packageName = process.env.ANDROID_PACKAGE_NAME || "com.sifreliveritransferi.securevault";
+  const verification = await verifyGooglePlaySubscription(packageName, productId, purchaseToken);
+  if (!verification.ok) {
+    if (verification.reason === "verification_disabled") {
+      secLog("info", "billing_verify_pending", { userId, productId });
+      return res.status(503).json({
+        error: "Satin alma dogrulamasi henuz aktif degil. Lutfen daha sonra tekrar deneyin.",
+        pending: true,
+      });
+    }
+    // Dogrulama yapildi ama satin alma gecersiz/suresi gecmis/sahte
+    secLog("warn", "billing_verify_rejected", { userId, productId, reason: verification.reason });
+    return res.status(402).json({
+      error: "Satin alma dogrulanamadi. Gecerli bir abonelik bulunamadi.",
     });
   }
 

@@ -150,3 +150,6 @@ vite.config.ts.timestamp-*
 .profile
 .cloud-locale-test.skip
 server.js.bak-*
+secrets/
+*.json.key
+play-service-account*.json

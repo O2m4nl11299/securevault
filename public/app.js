@@ -152,6 +152,16 @@ async function getBrowserFingerprint() {
         el.appendChild(span);
       });
     }
+    if (opts.link && opts.link.url && opts.link.text) {
+      el.appendChild(document.createElement('br'));
+      var a = document.createElement('a');
+      a.href = opts.link.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = opts.link.text;
+      a.className = 'alert-link';
+      el.appendChild(a);
+    }
   }
 
   // ─── File Selection ─────────────────────────────────────────────────────────
@@ -165,7 +175,7 @@ async function getBrowserFingerprint() {
       if (!session) {
         showAlert('uploadAlert', 'error', { icon: '⚠', title: 'Dosya çok büyük.', lines: ['Üye olmayan kullanıcılar en fazla ' + formatSize(PLAN_FILE_LIMITS.anon) + ' yükleyebilir.', 'Daha büyük dosyalar için üye olun (250 MB) veya giriş yapın.'] });
       } else if (plan !== 'premium' && file.size <= PLAN_FILE_LIMITS.premium) {
-        showAlert('uploadAlert', 'error', { icon: '⚠', title: 'Dosya çok büyük.', lines: ['Free üyelik limiti: ' + formatSize(PLAN_FILE_LIMITS.free) + '.', 'Bu dosya boyutu için Premium (2 GB) gerekiyor — yakında!'] });
+        showAlert('uploadAlert', 'error', { icon: '⚠', title: 'Dosya çok büyük.', lines: ['Free üyelik limiti: ' + formatSize(PLAN_FILE_LIMITS.free) + '.', 'Bu dosya boyutu için Premium (2 GB) gerekiyor.', 'Premium aboneliğe mobil uygulamamızdan geçebilirsiniz:'], link: { url: 'https://play.google.com/store/apps/details?id=com.sifreliveritransferi.securevault', text: '📱 Google Play\'de SecureVault\'u aç' } });
       } else {
         showAlert('uploadAlert', 'error', { icon: '⚠', title: 'Dosya çok büyük.', lines: ['Maksimum: ' + formatSize(maxSize)] });
       }

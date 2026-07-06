@@ -1160,11 +1160,11 @@ async function getBrowserFingerprint() {
       var u = document.getElementById("regUsername").value.trim();
       var p = document.getElementById("regPassword").value;
       var alrt = document.getElementById("registerAlert");
-      var kvkk = document.getElementById("kvkkConsent");
       var terms = document.getElementById("termsConsent");
+      var transfer = document.getElementById("transferConsent");
       if (!u || !p) { alrt.className="alert error"; alrt.textContent="Tüm alanları doldurun."; return; }
-      if (kvkk && !kvkk.checked) { alrt.className="alert error"; alrt.textContent="KVKK metnini kabul etmeniz gerekiyor."; return; }
-      if (terms && !terms.checked) { alrt.className="alert error"; alrt.textContent="Kullanım Şartları ve Sorumluluk Reddi'ni kabul etmeniz gerekiyor."; return; }
+      if (terms && !terms.checked) { alrt.className="alert error"; alrt.textContent="Kullanım Sözleşmesi ve Sorumluluk Reddi'ni kabul etmeniz gerekiyor."; return; }
+      if (transfer && !transfer.checked) { alrt.className="alert error"; alrt.textContent="Yurt dışı veri aktarımı onayını vermeniz gerekmektedir."; return; }
       try {
         var res = await fetch("/auth/register", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username:u,password:p}) });
         var data = await res.json();

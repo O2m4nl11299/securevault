@@ -171,12 +171,13 @@
         <label class="field-label">ŞİFRE</label>
         <input type="password" id="regPassword" placeholder="En az 8 karakter" autocomplete="new-password" class="csp-15">
         <div class="csp-16">
-          <input type="checkbox" id="kvkkConsent" class="csp-17">
-          <label for="kvkkConsent"><a href="/kvkk" target="_blank" class="csp-18">KVKK Aydınlatma Metni</a>'ni ve <a href="/sozlesme" target="_blank" class="csp-18">Kullanım Sözleşmesi</a>'ni okudum, kabul ediyorum.</label>
-        </div>
-        <div class="csp-16">
           <input type="checkbox" id="termsConsent" class="csp-17">
-          <label for="termsConsent"><a href="/sartlar" target="_blank" class="csp-18">Kullanım Şartları ve Sorumluluk Reddi</a>'ni okudum, kabul ediyorum.</label>
+          <label for="termsConsent"><a href="/sozlesme" target="_blank" class="csp-18">Kullanım Sözleşmesi</a>'ni ve <a href="/sartlar" target="_blank" class="csp-18">Sorumluluk Reddi Beyanı</a>'ni okudum, kabul ediyorum.</label>
+        </div>
+        <div class="field-label">Kişisel verilerinizin işlenmesine ilişkin detaylara <a href="/kvkk" target="_blank" class="csp-18">KVKK Aydınlatma Metni</a> üzerinden ulaşabilirsiniz.</div>
+        <div class="csp-16">
+          <input type="checkbox" id="transferConsent" class="csp-17">
+          <label for="transferConsent">Verilerimin, teknik operasyonların yürütülmesi amacıyla yurt dışı yerleşik altyapı sağlayıcılarında (Cloudflare R2) güvenli şekilde işlenmesine açık rıza veriyorum.</label>
         </div>
         <button class="btn" id="registerBtn">ÜYE OL</button>
         <div class="alert csp-19" id="registerAlert"></div>

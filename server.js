@@ -33,6 +33,51 @@ const express = require("express");
 const helmet = require("helmet");
 const multer = require("multer");
 const { v4: uuidv4 } = require("uuid");
+
+// ─── Imha Sertifikasi (Deletion Certificate) — Ed25519 imzali ──────────────
+// Dosya imha edildiginde (indirildi/suresi doldu) imzali kayit uretilir.
+// Icerik/dosya adi ICERMEZ (zero-knowledge bozulmaz); token'in SHA-256'i tutulur.
+const _certCrypto = require("crypto");
+const _certFs = require("fs");
+let CERT_PRIV_KEY = null, CERT_PUB_KEY_PEM = null;
+try {
+  CERT_PRIV_KEY = _certCrypto.createPrivateKey(_certFs.readFileSync("/opt/securevault/keys/cert_ed25519_priv.pem"));
+  CERT_PUB_KEY_PEM = _certFs.readFileSync("/opt/securevault/keys/cert_ed25519_pub.pem", "utf8");
+  console.log("[Cert] Imha sertifikasi anahtarlari yuklendi");
+} catch (err) {
+  console.warn("[Cert] Anahtar yuklenemedi, sertifika uretimi devre disi:", err.message);
+}
+function certTokenHash(token) {
+  return _certCrypto.createHash("sha256").update(token).digest("hex");
+}
+function buildCertPayload(tokenHash, sizeBytes, uploadedAt, deletedAt, reason) {
+  // Ayni alan sirasi hem imzalama hem dogrulamada kullanilir — degistirme!
+  return JSON.stringify({
+    v: 1,
+    tokenHash: tokenHash,
+    sizeBytes: sizeBytes == null ? null : Number(sizeBytes),
+    uploadedAt: uploadedAt ? new Date(uploadedAt).toISOString() : null,
+    deletedAt: new Date(deletedAt).toISOString(),
+    reason: reason,
+  });
+}
+async function recordDeletionCertificate(token, sizeBytes, uploadedAtMs, reason) {
+  if (!CERT_PRIV_KEY) return;
+  try {
+    const tokenHash = certTokenHash(token);
+    const deletedAt = new Date();
+    const uploadedAt = uploadedAtMs ? new Date(Number(uploadedAtMs)) : null;
+    const payload = buildCertPayload(tokenHash, sizeBytes, uploadedAt, deletedAt, reason);
+    const signature = _certCrypto.sign(null, Buffer.from(payload), CERT_PRIV_KEY).toString("base64");
+    await db.query(
+      "INSERT INTO deletion_certificates (token_hash, size_bytes, uploaded_at, deleted_at, reason, signature) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (token_hash) DO NOTHING",
+      [tokenHash, sizeBytes == null ? null : Number(sizeBytes), uploadedAt, deletedAt, reason, signature]
+    );
+    secLog("info", "deletion_cert_recorded", { token: token.slice(0, 8) + "...", reason });
+  } catch (err) {
+    secLog("error", "deletion_cert_failed", { err: err.message });
+  }
+}
 const Redis = require("ioredis");
 const nodemailer = require("nodemailer");
 const { google } = require("googleapis");
@@ -424,6 +469,39 @@ function isValidToken(token) {
 
 app.use(express.static(path.join(__dirname, "public")));
 
+// GET /certificate/:token — Imha Sertifikasi sorgulama (herkese acik).
+// Token'i bilen sorgulayabilir; icerik bilgisi icermez (zero-knowledge korunur).
+app.get("/certificate/:token", async (req, res) => {
+  const token = req.params.token || "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
+    return res.status(400).json({ error: "Geçersiz sorgu." });
+  }
+  try {
+    const stillExists = await redis.get(`token:${token}`);
+    if (stillExists) {
+      return res.json({ status: "pending", message: "Dosya henüz imha edilmedi — hâlâ aktif." });
+    }
+    const r = await db.query(
+      "SELECT token_hash, size_bytes, uploaded_at, deleted_at, reason, signature FROM deletion_certificates WHERE token_hash = $1",
+      [certTokenHash(token)]
+    );
+    if (r.rows.length === 0) {
+      return res.status(404).json({ status: "not_found", message: "Bu linke ait imha kaydı bulunamadı. Kayıtlar 90 gün saklanır." });
+    }
+    const row = r.rows[0];
+    const payload = buildCertPayload(row.token_hash, row.size_bytes, row.uploaded_at, row.deleted_at, row.reason);
+    return res.json({
+      status: "destroyed",
+      certificate: JSON.parse(payload),
+      signature: row.signature,
+      algorithm: "Ed25519",
+      publicKeyPem: CERT_PUB_KEY_PEM,
+    });
+  } catch (err) {
+    secLog("error", "cert_query_failed", { err: err.message });
+    return res.status(500).json({ error: "Sorgu başarısız." });
+  }
+});
 app.get("/kvkk", (req, res) => res.sendFile(path.join(__dirname, "public", "kvkk.html")));
 app.get("/sozlesme", (req, res) => res.sendFile(path.join(__dirname, "public", "sozlesme.html")));
 app.get("/sartlar", (req, res) => res.sendFile(path.join(__dirname, "public", "sartlar.html")));
@@ -517,7 +595,7 @@ app.post("/upload", uploadLimiter, upload.single("encryptedFile"), async (req, r
 
   try {
     await redis.setex(`token:${token}`, TOKEN_TTL_SECONDS, metadata);
-    await redis.setex(`r2key:${token}`, TOKEN_TTL_SECONDS + 60, r2Key);
+    await redis.setex(`r2key:${token}`, TOKEN_TTL_SECONDS + 60, JSON.stringify({ k: r2Key, s: req.file.size, u: Date.now() }));
   } catch (err) {
     await deleteR2Object(r2Key);
     secLog("error", "redis_write_failed", { ip, err: err.message });
@@ -560,6 +638,39 @@ const sessionCleanupInterval = setInterval(async () => {
     }
   }
 }, 2 * 60 * 1000);
+// Erisim kayitlarini (access_logs) 90 gunden eski olanlari otomatik siler.
+// KVKK metninde belirtilen saklama suresiyle (3 ay) birebir uyumlu olmasi ICIN
+// bu deger degistirilirse KVKK metni de guncellenmelidir.
+const ACCESS_LOG_RETENTION_DAYS = 90;
+async function cleanupAccessLogs() {
+  try {
+    const result = await db.query(
+      "DELETE FROM access_logs WHERE created_at < NOW() - ($1 || ' days')::interval",
+      [ACCESS_LOG_RETENTION_DAYS]
+    );
+    if (result.rowCount > 0) {
+      secLog("info", "access_log_cleanup", { deleted: result.rowCount });
+    }
+  } catch (err) {
+    secLog("error", "access_log_cleanup_failed", { err: err.message });
+  }
+}
+cleanupAccessLogs();
+const accessLogCleanupInterval = setInterval(cleanupAccessLogs, 24 * 60 * 60 * 1000);
+// Imha sertifikalari da 90 gun saklanir (KVKK metniyle uyumlu).
+async function cleanupDeletionCerts() {
+  try {
+    const result = await db.query(
+      "DELETE FROM deletion_certificates WHERE deleted_at < NOW() - INTERVAL '90 days'"
+    );
+    if (result.rowCount > 0) secLog("info", "deletion_cert_cleanup", { deleted: result.rowCount });
+  } catch (err) {
+    secLog("error", "deletion_cert_cleanup_failed", { err: err.message });
+  }
+}
+cleanupDeletionCerts();
+const deletionCertCleanupInterval = setInterval(cleanupDeletionCerts, 24 * 60 * 60 * 1000);
+
 
 /**
  * POST /upload/init — Streaming yüklemeyi başlat (R2 multipart create).
@@ -809,7 +920,7 @@ app.post("/upload/finalize/:uploadId", async (req, res) => {
 
   try {
     await redis.setex(`token:${token}`, TOKEN_TTL_SECONDS, metadata);
-    await redis.setex(`r2key:${token}`, TOKEN_TTL_SECONDS + 60, session.r2Key);
+    await redis.setex(`r2key:${token}`, TOKEN_TTL_SECONDS + 60, JSON.stringify({ k: session.r2Key, s: session.totalBytes, u: Date.now() }));
   } catch (err) {
     await deleteR2Object(session.r2Key);
     uploadSessions.delete(uploadId);
@@ -1008,6 +1119,7 @@ app.get("/api/dl/:token", downloadLimiter, async (req, res) => {
     cleanedUp = true;
     await deleteR2Object(r2Key);
     redis.del(`r2key:${token}`).catch(() => {});
+    await recordDeletionCertificate(token, size, meta.uploadedAt, "downloaded");
     secLog("info", "r2_object_deleted_after_download", { token: token.slice(0, 8) + "..." });
   }
 
@@ -1060,6 +1172,14 @@ app.post("/auth/login", async (req, res) => {
     const valid = await argon2.verify(user.password_hash, password);
     if (!valid) return res.status(401).json({ error: "Kullanıcı adı veya şifre hatalı." });
     await db.query("UPDATE users SET last_active_at = NOW() WHERE id = $1", [user.id]);
+    try {
+      await db.query(
+        "INSERT INTO access_logs (user_id, username_hash, ip, event) VALUES ($1, $2, $3, 'login')",
+        [user.id, usernameHash, req.ip]
+      );
+    } catch (logErr) {
+      secLog("error", "access_log_insert_failed", { err: logErr.message });
+    }
     const sessionToken = randomBytes(32).toString("hex");
     await redis.setex("session:" + sessionToken, 86400, JSON.stringify({ userId: user.id, plan: user.plan }));
     return res.json({ success: true, sessionToken, plan: user.plan, isAdmin: !!user.is_admin });
@@ -1463,9 +1583,17 @@ async function start() {
       const token = expiredKey.replace("token:", "");
       const r2KeyKey = `r2key:${token}`;
       try {
-        const r2Key = await redis.get(r2KeyKey);
+        const rawShadow = await redis.get(r2KeyKey);
+        let r2Key = rawShadow, shadowSize = null, shadowUploadedAt = null;
+        if (rawShadow) {
+          try {
+            const o = JSON.parse(rawShadow);
+            if (o && o.k) { r2Key = o.k; shadowSize = o.s; shadowUploadedAt = o.u; }
+          } catch (_) { /* eski format: duz r2Key stringi */ }
+        }
         if (r2Key && isValidR2Key(r2Key)) {
           await deleteR2Object(r2Key);
+          await recordDeletionCertificate(token, shadowSize, shadowUploadedAt, "expired");
           secLog("info", "expire_worker_r2_deleted", { token: token.slice(0, 8) + "..." });
         }
         await redis.del(r2KeyKey);

@@ -1155,6 +1155,58 @@ async function getBrowserFingerprint() {
     if (showReg) showReg.addEventListener("click", function() { showAuthForm("register"); });
     if (showLog) showLog.addEventListener("click", function() { showAuthForm("login"); });
     if (showRec) showRec.addEventListener("click", function() { showAuthForm("recover"); });
+    // ── Imha Sertifikasi sorgulama ──
+    var certBtn = document.getElementById("certQueryBtn");
+    var lastCert = null;
+    if (certBtn) certBtn.addEventListener("click", async function() {
+      var inp = document.getElementById("certLinkInput").value.trim();
+      var alrt = document.getElementById("certAlert");
+      var box = document.getElementById("certResultBox");
+      var det = document.getElementById("certDetails");
+      box.style.display = "none"; lastCert = null;
+      var m = inp.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      if (!m) { alrt.className = "alert error"; alrt.textContent = "Link veya kod tanınamadı. İndirme linkini olduğu gibi yapıştırın."; return; }
+      alrt.className = "alert"; alrt.textContent = "Sorgulanıyor...";
+      try {
+        var res = await fetch("/certificate/" + m[0]);
+        var data = await res.json();
+        if (data.status === "pending") {
+          alrt.className = "alert warn";
+          alrt.textContent = "⏳ Dosya henüz imha edilmedi — hâlâ aktif (indirilmedi ve süresi dolmadı).";
+          return;
+        }
+        if (data.status === "destroyed") {
+          alrt.className = "alert success";
+          alrt.textContent = "✔ Bu dosya kalıcı olarak imha edildi. Sertifika aşağıda.";
+          var cert = data.certificate;
+          var reasonTr = cert.reason === "downloaded" ? "Alıcı tarafından indirildi" : "Süresi doldu";
+          det.textContent =
+            "İmha nedeni: " + reasonTr + "\n" +
+            "Yüklenme: " + (cert.uploadedAt ? new Date(cert.uploadedAt).toLocaleString("tr-TR") : "—") + "\n" +
+            "İmha: " + new Date(cert.deletedAt).toLocaleString("tr-TR") + "\n" +
+            "Boyut: " + (cert.sizeBytes != null ? cert.sizeBytes + " bayt" : "—") + "\n" +
+            "Kayıt kimliği (SHA-256): " + cert.tokenHash.slice(0, 24) + "...\n" +
+            "İmza (Ed25519): " + data.signature.slice(0, 24) + "...";
+          lastCert = data;
+          box.style.display = "block";
+          return;
+        }
+        alrt.className = "alert error";
+        alrt.textContent = data.message || "Bu linke ait imha kaydı bulunamadı. Kayıtlar 90 gün saklanır.";
+      } catch (e) {
+        alrt.className = "alert error"; alrt.textContent = "Sorgu başarısız. Bağlantınızı kontrol edin.";
+      }
+    });
+    var certDlBtn = document.getElementById("certDownloadBtn");
+    if (certDlBtn) certDlBtn.addEventListener("click", function() {
+      if (!lastCert) return;
+      var blob = new Blob([JSON.stringify(lastCert, null, 2)], { type: "application/json" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "imha-sertifikasi-" + lastCert.certificate.tokenHash.slice(0, 12) + ".json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
     var regBtn = document.getElementById("registerBtn");
     if (regBtn) regBtn.addEventListener("click", async function() {
       var u = document.getElementById("regUsername").value.trim();

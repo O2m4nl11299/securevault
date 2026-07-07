@@ -153,3 +153,4 @@ server.js.bak-*
 secrets/
 *.json.key
 play-service-account*.json
+keys/

@@ -328,6 +328,43 @@ async function getBrowserFingerprint() {
   }
 
   var BASE64_REGEX = /^[A-Za-z0-9+/\-_]+=*$/;
+  // ─── İki Anahtarlı Kasa (XOR 2/2) — anahtar iki parçaya bölünür; ikisi
+  // olmadan matematiksel olarak birleştirilemez. Parçalar SUNUCUYA GİTMEZ.
+  function bytesToB64Url(bytes) {
+    var s = ''; for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64UrlToBytes(str) {
+    var std = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (std.length % 4) std += '=';
+    return Uint8Array.from(atob(std), function(c) { return c.charCodeAt(0); });
+  }
+  async function vaultChecksum(keyBytes) {
+    var h = await crypto.subtle.digest('SHA-256', keyBytes);
+    return bytesToB64Url(new Uint8Array(h).slice(0, 12));
+  }
+  async function vaultSplitKey(keyB64) {
+    var std = keyB64.replace(/-/g, '+').replace(/_/g, '/');
+    var key = Uint8Array.from(atob(std), function(c) { return c.charCodeAt(0); });
+    var r = crypto.getRandomValues(new Uint8Array(key.length));
+    var x = new Uint8Array(key.length);
+    for (var i = 0; i < key.length; i++) x[i] = key[i] ^ r[i];
+    var check = await vaultChecksum(key);
+    return { p1: 'k1.' + bytesToB64Url(r) + '.' + check,
+             p2: 'k2.' + bytesToB64Url(x) + '.' + check };
+  }
+  async function vaultCombine(pA, pB) {
+    var a = pA.split('.'), b = pB.split('.');
+    if (a.length !== 3 || b.length !== 3) return null;
+    if (a[0] === b[0]) return null;      // ayni parca iki kez yapistirilmis
+    if (a[2] !== b[2]) return null;      // farkli dosyalarin parcalari
+    var ba = b64UrlToBytes(a[1]), bb = b64UrlToBytes(b[1]);
+    if (ba.length !== 32 || bb.length !== 32) return null;
+    var key = new Uint8Array(32);
+    for (var i = 0; i < 32; i++) key[i] = ba[i] ^ bb[i];
+    if (await vaultChecksum(key) !== a[2]) return null; // yanlis/bozuk parca
+    return btoa(String.fromCharCode.apply(null, key));
+  }
   function isValidKeyB64(str) {
     if (!str || typeof str !== 'string' || !BASE64_REGEX.test(str)) return false;
     try { var std = str.replace(/-/g, '+').replace(/_/g, '/'); return atob(std).length === 32; }
@@ -786,6 +823,14 @@ async function getBrowserFingerprint() {
       showAlert('uploadAlert', 'error', { icon: '❌', title: 'Dosya çok büyük.', lines: ['Maksimum: ' + formatSize(maxSizeCheck)] });
       return;
     }
+    if (document.getElementById('vaultMode') && document.getElementById('vaultMode').checked) {
+      var svIsAdminV = sessionStorage.getItem('sv_is_admin') === 'true';
+      if (svPlan !== 'premium' && !svIsAdminV) {
+        showAlert('uploadAlert', 'error', { icon: '🔐', title: 'İki Anahtarlı Kasa Premium üyelere özeldir.',
+          lines: ['Premium aboneliğinizi mobil uygulamadan başlatabilirsiniz.', 'Ya da kutucuğun işaretini kaldırıp normal gönderim yapabilirsiniz.'] });
+        return;
+      }
+    }
 
     var btn = document.getElementById('encryptBtn');
     btn.disabled = true; isUploading = true;
@@ -793,6 +838,8 @@ async function getBrowserFingerprint() {
     document.getElementById('logBox').textContent = '';
     document.getElementById('logBox').classList.remove('visible');
     document.getElementById('copyLinkBox').classList.remove('visible');
+    var vlb = document.getElementById('vaultLinksBox');
+    if (vlb) vlb.classList.remove('visible');
 
     try {
       log('info', 'AES-256 anahtarı üretiliyor...');
@@ -854,14 +901,35 @@ async function getBrowserFingerprint() {
         encBlob = null; // RAM serbest bırak
       }
 
+      var vaultOn = !!(document.getElementById('vaultMode') && document.getElementById('vaultMode').checked);
       var extraPwd = (document.getElementById("extraPassword") || {value:""}).value;
       var pwdSuffix = "";
       setProgress(90, 'Link oluşturuluyor...');
-      if (extraPwd) { pwdSuffix = '|' + await hashPassword(extraPwd); }
-      var downloadUrl = window.location.origin + '/dl/' + data.token + '#' + encodeURIComponent(keyB64) + pwdSuffix;
-      document.getElementById('copyLinkUrl').value = downloadUrl;
-      document.getElementById('copyLinkBox').classList.add('visible');
+      if (vaultOn) {
+        var vParts = await vaultSplitKey(keyB64);
+        var vBase = window.location.origin + '/dl/' + data.token + '#';
+        document.getElementById('vaultLink1').value = vBase + vParts.p1;
+        document.getElementById('vaultLink2').value = vBase + vParts.p2;
+        document.getElementById('vaultLinksBox').classList.add('visible');
+      } else {
+        if (extraPwd) { pwdSuffix = '|' + await hashPassword(extraPwd); }
+        var downloadUrl = window.location.origin + '/dl/' + data.token + '#' + encodeURIComponent(keyB64) + pwdSuffix;
+        document.getElementById('copyLinkUrl').value = downloadUrl;
+        document.getElementById('copyLinkBox').classList.add('visible');
+      }
 
+      if (vaultOn) {
+        setProgress(100, 'Tamamlandı');
+        log('ok', '🔐 İki Anahtarlı Kasa hazır — iki parça linki yukarıda.');
+        showAlert('uploadAlert', 'success', { icon: '🔐', title: 'Kasa hazır!', lines: [
+          'Parça 1 linkini alıcıya gönderin.',
+          'Parça 2 sizde — alıcı dosyayı açarken isteyince güvenilir bir kanaldan iletin.',
+          'E-posta bilerek gönderilmedi: sunucu hiçbir anahtar parçası görmedi.',
+          'Link ' + Math.round((data.ttl||3600)/60) + ' dakika geçerli, tek kullanımlık.'
+        ]});
+        isUploading = false; btn.disabled = false;
+        return;
+      }
       log('info', 'E-posta gönderiliyor...');
       setProgress(93, 'Email gönderiliyor...');
       var emailRes = await fetch('/send-link', {
@@ -892,6 +960,17 @@ async function getBrowserFingerprint() {
     } finally { isUploading = false; btn.disabled = false; }
   };
 
+  function vaultCopy(id) {
+    var u = document.getElementById(id); u.select(); u.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(u.value).then(function() {
+      var t = document.getElementById('vaultToast'); t.classList.add('visible');
+      setTimeout(function() { t.classList.remove('visible'); }, 2500);
+    }).catch(function() { try { document.execCommand('copy'); } catch(e) {} });
+  }
+  var vc1 = document.getElementById('vaultCopy1');
+  var vc2 = document.getElementById('vaultCopy2');
+  if (vc1) vc1.addEventListener('click', function() { vaultCopy('vaultLink1'); });
+  if (vc2) vc2.addEventListener('click', function() { vaultCopy('vaultLink2'); });
   window.copyLinkToClipboard = function() {
     var u = document.getElementById('copyLinkUrl'); u.select(); u.setSelectionRange(0, 99999);
     navigator.clipboard.writeText(u.value).then(function() {
@@ -958,6 +1037,19 @@ async function getBrowserFingerprint() {
     if (!hash || hash.length < 5) return null;
     try {
       var fullFragment = decodeURIComponent(hash.slice(1));
+      if (/^k[12]\./.test(fullFragment)) {
+        // İki Anahtarlı Kasa parçası — anahtar kutusuna yazma, parça modunu aç
+        window.__vaultShareA = fullFragment;
+        document.getElementById('autoDecryptBanner').style.display = 'block';
+        var vsb = document.getElementById('vaultShareBox');
+        if (vsb) vsb.style.display = 'block';
+        document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+        document.querySelector('.tab-decrypt').classList.add('active');
+        document.getElementById('panel-decrypt').classList.add('active');
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+        return null;
+      }
       var keyB64 = fullFragment.includes('|') ? fullFragment.split('|')[0] : fullFragment;
     if (!BASE64_REGEX.test(keyB64) || !isValidKeyB64(keyB64)) return null;
       document.getElementById('keyInput').value = keyB64;
@@ -992,6 +1084,22 @@ async function getBrowserFingerprint() {
     );
     if (!match) return;
     var token = match[1];
+    if (window.__vaultShareA) {
+      var shareBRaw = (document.getElementById('vaultShare2Input') || {value:''}).value.trim();
+      if (!shareBRaw) { var vsb2 = document.getElementById('vaultShareBox'); if (vsb2) vsb2.style.display = 'block'; return; }
+      var mB = shareBRaw.match(/k[12]\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+/);
+      if (!mB) {
+        showAlert('decryptAlert', 'error', { icon: '❌', title: 'Parça tanınamadı.', lines: ['Göndericiden aldığınız parçayı (k1./k2. ile başlayan) veya linkin tamamını yapıştırın.'] });
+        return;
+      }
+      var combined = await vaultCombine(window.__vaultShareA, mB[0]);
+      if (!combined) {
+        showAlert('decryptAlert', 'error', { icon: '❌', title: 'Parçalar eşleşmedi — indirme başlatılmadı.', lines: ['Yanlış parça olabilir ya da aynı parçayı iki kez yapıştırdınız.', 'Tek kullanımlık hakkınız korundu; doğru parçayla tekrar deneyin.'] });
+        return;
+      }
+      document.getElementById('keyInput').value = combined;
+      window.__vaultVerified = true;
+    }
     var urlFragment = window.location.hash.slice(1);
     var hasPwdHash = urlFragment.includes('|');
     var storedPwdHash = hasPwdHash ? urlFragment.split('|')[1] : '';
@@ -1075,6 +1183,8 @@ async function getBrowserFingerprint() {
     handleDownloadPath();
     var dlBtn = document.getElementById('dlPasswordBtn');
     if (dlBtn) dlBtn.addEventListener('click', handleDownloadPath);
+    var vsBtn = document.getElementById('vaultShare2Btn');
+    if (vsBtn) vsBtn.addEventListener('click', handleDownloadPath);
   }
 
   // ─── [v2.6] Event Bindings (inline onclick/onchange kaldırıldı — CSP uyumu) ──

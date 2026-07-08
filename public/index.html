@@ -86,6 +86,10 @@
       <input type="email" id="recipientEmail" placeholder="alici@sirket.com">
       <label class="field-label csp-8">EK ŞİFRE KORUMASI (OPSİYONEL)</label>
       <input type="password" id="extraPassword" placeholder="Alıcıya SMS/telefon ile ilet..." autocomplete="off">
+      <div class="csp-16" id="vaultOptionRow">
+        <input type="checkbox" id="vaultMode" class="csp-17">
+        <label for="vaultMode">🔐 <strong>İki Anahtarlı Kasa</strong> (Premium) — Anahtar iki parçaya bölünür: Parça 1 linki alıcıya gider, Parça 2 sizde kalır. Alıcı dosyayı ancak siz ikinci parçayı güvenilir bir kanaldan ilettiğinizde açabilir.</label>
+      </div>
       <button class="btn" id="encryptBtn" disabled><span id="btnContent">⬇ ŞİFRELE &amp; GÖNDER</span></button>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-label"><span id="progressLabel">Şifreleniyor...</span><span id="progressPct">0%</span></div>
@@ -99,6 +103,15 @@
         <div class="copy-actions"><button class="btn secondary" id="copyBtn">📋 KOPYALA</button></div>
         <div class="copy-toast" id="copyToast">✓ Link panoya kopyalandı</div>
       </div>
+      <div class="copy-link-box" id="vaultLinksBox">
+        <span class="copy-label">🔐 İKİ ANAHTARLI KASA — PARÇA 1 (ALICIYA GÖNDERİN)</span>
+        <input type="text" class="copy-link-url" id="vaultLink1" readonly>
+        <div class="copy-actions"><button class="btn secondary" id="vaultCopy1">📋 PARÇA 1 LİNKİNİ KOPYALA</button></div>
+        <span class="copy-label csp-8">🔑 PARÇA 2 (SİZDE KALIR — alıcı isteyince güvenilir kanaldan iletin)</span>
+        <input type="text" class="copy-link-url" id="vaultLink2" readonly>
+        <div class="copy-actions"><button class="btn secondary" id="vaultCopy2">📋 PARÇA 2'Yİ KOPYALA</button></div>
+        <div class="copy-toast" id="vaultToast">✓ Kopyalandı</div>
+      </div>
     </div>
   </div>
   <!-- DECRYPT -->
@@ -109,6 +122,12 @@
         <label class="field-label">EK ŞİFRE GEREKLİ</label>
         <input type="password" id="dlPassword" placeholder="Göndericiden aldığınız şifreyi girin..." autocomplete="off">
         <button class="btn csp-11" id="dlPasswordBtn">🔓 DOSYAYI İNDİR</button>
+      </div>
+      <div id="vaultShareBox" class="csp-10">
+        <label class="field-label">🔐 İKİ ANAHTARLI KASA — İKİNCİ ANAHTAR PARÇASI GEREKLİ</label>
+        <div class="field-label">Bu dosya iki anahtarlı kasa ile korunuyor. Göndericiden aldığınız 2. parçayı (veya linkin tamamını) yapıştırın. Parça doğrulanmadan indirme başlamaz — hakkınız yanmaz.</div>
+        <input type="text" id="vaultShare2Input" placeholder="k2.XXXX... veya linkin tamamı" autocomplete="off">
+        <button class="btn csp-11" id="vaultShare2Btn">🔓 PARÇAYI DOĞRULA VE İNDİR</button>
       </div>
     </div>
     <div class="section-label">ŞİFRELİ DOSYA (.enc)</div>
@@ -296,6 +315,7 @@
       <div class="crypto-row"><span class="crypto-key">☁️ CLOUDFLARE R2</span><span class="crypto-val">Küresel CDN altyapısı. Sıfır egress ücreti.</span></div>
       <div class="crypto-row"><span class="crypto-key">🔬 KUANTUM DİRENCİ</span><span class="crypto-val">AES-256-GCM simetrik şifrelemesi kuantum bilgisayarlara karşı da güvenli kabul edilir. Anahtarlar cihazınızda üretilir; ağ üzerinden asimetrik anahtar değişimi yapılmaz.</span></div>
       <div class="crypto-row"><span class="crypto-key">🛡 İMHA SERTİFİKASI</span><span class="crypto-val">Sektörde bir ilk: Dosyanız imha edildiğinde kriptografik imzalı (Ed25519) sertifika üretilir. "Silindi" demiyoruz — kanıtlıyoruz. "Şifreli Dosyayı Çöz" sekmesinden sorgulayın.</span></div>
+      <div class="crypto-row"><span class="crypto-key">🗝 İKİ ANAHTARLI KASA</span><span class="crypto-val">Premium: Şifre anahtarı iki parçaya bölünür — parçalardan biri alıcıda, diğeri sizde. Dosya ancak iki parça bir araya gelince açılabilir; sunucu hiçbir parçayı görmez. Yanlış parça girildiğinde indirme başlamaz, tek kullanımlık hakkınız yanmaz.</span></div>
     </div>
     <div class="section-label csp-42">VİRÜS TARAMASI HAKKINDA</div>
     <div class="card">

@@ -356,6 +356,13 @@ const sendLinkLimiter = createRateLimiter({
   message: "Çok fazla e-posta gönderim isteği.",
 });
 
+const certLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 20,
+  message: "Çok fazla sertifika sorgusu. Lütfen biraz bekleyin.",
+  prefix: "rl_cert",
+});
+
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(
   helmet({
@@ -471,7 +478,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // GET /certificate/:token — Imha Sertifikasi sorgulama (herkese acik).
 // Token'i bilen sorgulayabilir; icerik bilgisi icermez (zero-knowledge korunur).
-app.get("/certificate/:token", async (req, res) => {
+app.get("/certificate/:token", certLimiter, async (req, res) => {
   const token = req.params.token || "";
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
     return res.status(400).json({ error: "Geçersiz sorgu." });

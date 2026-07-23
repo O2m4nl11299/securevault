@@ -57,9 +57,18 @@ async function getBrowserFingerprint() {
   function getCurrentMaxFileSize() {
     var session = sessionStorage.getItem('sv_session');
     if (!session) return PLAN_FILE_LIMITS.anon;
+    if (sessionStorage.getItem('sv_is_admin') === 'true') return PLAN_FILE_LIMITS.admin;
     var plan = sessionStorage.getItem('sv_plan') || 'free';
     return PLAN_FILE_LIMITS[plan] || PLAN_FILE_LIMITS.free;
   }
+  // Guvenlik sekmesindeki "DOSYA LIMITI" satirini oturum planina gore gunceller.
+  function refreshInfoFileLimit() {
+    var el = document.getElementById('infoFileLimit');
+    if (!el) return;
+    el.textContent = formatSize(getCurrentMaxFileSize());
+  }
+  window.__refreshInfoFileLimit = refreshInfoFileLimit;
+
   function formatSize(bytes) {
     if (bytes >= 1024 * 1024 * 1024) return (bytes / 1024 / 1024 / 1024) + ' GB';
     return Math.round(bytes / 1024 / 1024) + ' MB';
@@ -1064,6 +1073,7 @@ async function getBrowserFingerprint() {
     } catch(e) { return null; }
   }
   var autoKey = checkUrlFragment();
+  refreshInfoFileLimit();
 
   // ─── [v2.4] Auto-download — Streaming Decrypt ─────────────────────────────
 
@@ -1348,6 +1358,7 @@ async function getBrowserFingerprint() {
         sessionStorage.setItem("sv_session", data.sessionToken);
         sessionStorage.setItem("sv_plan", data.plan);
         sessionStorage.setItem("sv_is_admin", data.isAdmin ? "true" : "false");
+        if (window.__refreshInfoFileLimit) window.__refreshInfoFileLimit();
         var adminTabBtn1 = document.getElementById("adminTabBtn");
         if (adminTabBtn1) adminTabBtn1.style.display = data.isAdmin ? "block" : "none";
         document.getElementById("accountPlan").textContent = data.plan;

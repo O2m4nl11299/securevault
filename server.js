@@ -166,6 +166,7 @@ const PLAN_SEND_LIMITS = {
   anon: 3,    // 24 saatte 3 gonderim (anonim yukleme kapali, kullanilmiyor)
   free: 4,    // 24 saatte 4 gonderim
   premium: 20, // 24 saatte 20 gonderim
+  admin: 1000, // admin hesaplari icin pratikte sinirsiz
 };
 
 // R2 multipart minimum part size — son part hariç
@@ -701,6 +702,8 @@ app.post("/upload/init", uploadLimiter, async (req, res) => {
         const parsed = JSON.parse(sessionData);
         userPlan = parsed.plan || "free";
         userId = parsed.userId;
+        // Admin hesaplari yuksek boyut limitine sahiptir (test/yonetim amacli).
+        if (parsed.isAdmin) userPlan = "admin";
         await db.query("UPDATE users SET last_active_at = NOW() WHERE id = $1", [userId]);
       }
     } catch(e) {}
@@ -1188,7 +1191,7 @@ app.post("/auth/login", async (req, res) => {
       secLog("error", "access_log_insert_failed", { err: logErr.message });
     }
     const sessionToken = randomBytes(32).toString("hex");
-    await redis.setex("session:" + sessionToken, 86400, JSON.stringify({ userId: user.id, plan: user.plan }));
+    await redis.setex("session:" + sessionToken, 86400, JSON.stringify({ userId: user.id, plan: user.plan, isAdmin: !!user.is_admin }));
     return res.json({ success: true, sessionToken, plan: user.plan, isAdmin: !!user.is_admin });
   } catch (err) {
     secLog("error", "login_failed", { err: err.message });

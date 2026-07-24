@@ -65,6 +65,13 @@ async function getBrowserFingerprint() {
   function refreshInfoFileLimit() {
     var el = document.getElementById('infoFileLimit');
     if (!el) return;
+    // Anonim yukleme KAPALI oldugu icin, giris yapmamis ziyaretciye anon
+    // limitini (5 MB) gostermek yaniltici olur; plan secenekleri gosterilir.
+    if (!sessionStorage.getItem('sv_session')) {
+      el.textContent = formatSize(PLAN_FILE_LIMITS.free) + ' (Free) · ' +
+        formatSize(PLAN_FILE_LIMITS.premium) + ' (Premium)';
+      return;
+    }
     el.textContent = formatSize(getCurrentMaxFileSize());
   }
   window.__refreshInfoFileLimit = refreshInfoFileLimit;

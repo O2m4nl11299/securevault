@@ -11,3 +11,8 @@ Plan: Kasım-Aralık 2026'da Node 22 LTS'e geç, `npm ci` + tam test (upload/dow
   Sunucu yeniden kurulursa bu daraltma tekrar uygulanmalı.
 - Güvenlik özet raporu: `scripts/security_report.js` + systemd timer
   (`securevault-report.timer`, 09:00 ve 21:00 Europe/Istanbul).
+- Origin kilitleme: UFW'de 80/443 artık yalnızca Cloudflare IP aralıklarına
+  açık (geniş `Anywhere` kuralları silindi). Aralıklar haftalık olarak
+  `/usr/local/bin/update-cf-ufw.sh` + `cf-ufw-update.timer` ile güncelleniyor.
+  Sunucu yeniden kurulursa bu kilit tekrar uygulanmalı; aksi halde gerçek IP
+  sızdığında Cloudflare (WAF/DDoS) baypas edilebilir.

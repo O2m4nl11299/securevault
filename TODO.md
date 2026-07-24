@@ -16,3 +16,6 @@ Plan: Kasım-Aralık 2026'da Node 22 LTS'e geç, `npm ci` + tam test (upload/dow
   `/usr/local/bin/update-cf-ufw.sh` + `cf-ufw-update.timer` ile güncelleniyor.
   Sunucu yeniden kurulursa bu kilit tekrar uygulanmalı; aksi halde gerçek IP
   sızdığında Cloudflare (WAF/DDoS) baypas edilebilir.
+- Yedekleme: Hetzner otomatik sunucu yedeklemesi açık (tüm imaj: DB + kod +
+  /etc yapılandırmaları). Kullanıcı dosyaları R2'de ve 1 saatte imha
+  edildiği için yedeklenmiyor — bu bilinçli, sıfır-bilgi mimarisinin gereği.

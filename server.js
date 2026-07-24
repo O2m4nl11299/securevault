@@ -364,6 +364,27 @@ const certLimiter = createRateLimiter({
   prefix: "rl_cert",
 });
 
+// Kimlik dogrulama endpoint'leri icin brute-force korumasi.
+// Argon2id zaten yavas, ancak deneme sayisi da sinirlanmali (CPU + guvenlik).
+const loginLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 10,
+  message: "Çok fazla giriş denemesi. Lütfen 15 dakika sonra tekrar deneyin.",
+  prefix: "rl_login",
+});
+const registerLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  maxRequests: 5,
+  message: "Çok fazla kayıt denemesi. Lütfen daha sonra tekrar deneyin.",
+  prefix: "rl_register",
+});
+const recoverLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  maxRequests: 5,
+  message: "Çok fazla kurtarma denemesi. Lütfen daha sonra tekrar deneyin.",
+  prefix: "rl_recover",
+});
+
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(
   helmet({
@@ -1151,7 +1172,7 @@ app.get("/api/dl/:token", downloadLimiter, async (req, res) => {
 // ─── Auth Endpoints ───────────────────────────────────────────────────────────
 
 // POST /auth/register
-app.post("/auth/register", async (req, res) => {
+app.post("/auth/register", registerLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "Kullanıcı adı ve şifre gerekli." });
   if (username.length < 3 || username.length > 32) return res.status(400).json({ error: "Kullanıcı adı 3-32 karakter olmalı." });
@@ -1171,7 +1192,7 @@ app.post("/auth/register", async (req, res) => {
 });
 
 // POST /auth/login
-app.post("/auth/login", async (req, res) => {
+app.post("/auth/login", loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "Kullanıcı adı ve şifre gerekli." });
   try {
@@ -1200,7 +1221,7 @@ app.post("/auth/login", async (req, res) => {
 });
 
 // POST /auth/recover
-app.post("/auth/recover", async (req, res) => {
+app.post("/auth/recover", recoverLimiter, async (req, res) => {
   const { username, recoveryToken, newPassword } = req.body;
   if (!username || !recoveryToken || !newPassword) return res.status(400).json({ error: "Tüm alanlar gerekli." });
   if (newPassword.length < 8) return res.status(400).json({ error: "Şifre en az 8 karakter olmalı." });
